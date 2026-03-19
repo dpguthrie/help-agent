@@ -160,11 +160,11 @@ async def _fetch_kb_topics(db_pool: asyncpg.Pool) -> list[str]:
     """Fetch a summary of available KB topics from the database."""
     async with db_pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT DISTINCT title
-            FROM articles
-            WHERE title IS NOT NULL AND title != ''
-            ORDER BY random()
-            LIMIT 50
+            SELECT title FROM (
+                SELECT DISTINCT title
+                FROM articles
+                WHERE title IS NOT NULL AND title != ''
+            ) t ORDER BY random() LIMIT 50
         """)
         titles = [r["title"] for r in rows]
 
