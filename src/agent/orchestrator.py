@@ -175,6 +175,8 @@ class Orchestrator:
         )
 
         # Phase 1: Classify (non-streaming, fast)
+        yield StreamChunk(type="classify_start")
+
         classify_span = turn_span.start_span(name="classify", span_attributes={"type": "task"})
         bt_header = classify_span.export()
         classify_headers = {"x-bt-parent": bt_header} if bt_header else None
@@ -193,6 +195,12 @@ class Orchestrator:
         topic_changed = session.current_topic != topic_id
         session.current_topic = topic_id
 
+        yield StreamChunk(
+            type="classify_end",
+            topic_id=topic_id,
+            confidence=classify_result.confidence,
+        )
+
         # Phase 2: Execute (streaming)
         execute_span = turn_span.start_span(name="execute", span_attributes={"type": "task"})
         bt_header = execute_span.export()
@@ -208,7 +216,7 @@ class Orchestrator:
             extra_headers=execute_headers,
             trace_span=execute_span,
         ):
-            if chunk.type == "token":
+            if chunk.type in ("token", "tool_start", "tool_end"):
                 yield chunk
             elif chunk.type == "done":
                 full_response = chunk.response

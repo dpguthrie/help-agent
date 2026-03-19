@@ -178,6 +178,8 @@ class TopicExecutor:
                 except json.JSONDecodeError:
                     params = {}
 
+                yield StreamChunk(type="tool_start", tool_name=tool_name, tool_input=params)
+
                 tool_span = None
                 if trace_span:
                     tool_span = trace_span.start_span(name=f"tool_call.{tool_name}", span_attributes={"type": "tool"})
@@ -192,6 +194,8 @@ class TopicExecutor:
                 messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result_content})
                 tool_messages.append(Message(role="tool", content=result_content, tool_call_id=tc["id"], name=tool_name))
 
+                yield StreamChunk(type="tool_end", tool_name=tool_name, tool_output=result_content[:200])
+
             # Loop back for the next LLM call (post-tool-execution), which will stream the final response
 
         full_response = "I'm having trouble completing this request. Please try again."
@@ -200,7 +204,14 @@ class TopicExecutor:
 
 @dataclass
 class StreamChunk:
-    type: str  # "token", "tool_messages", "done"
+    type: str  # "token", "done", "classify_start", "classify_end", "tool_start", "tool_end"
     token: str = ""
     response: str = ""
     tool_messages: list[Message] = field(default_factory=list)
+    # For classify events
+    topic_id: str = ""
+    confidence: float = 0.0
+    # For tool events
+    tool_name: str = ""
+    tool_input: dict = field(default_factory=dict)
+    tool_output: str = ""
