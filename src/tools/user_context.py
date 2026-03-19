@@ -21,12 +21,20 @@ class GetUserContextTool(Tool):
         if row is None:
             return ToolResult(status="ok", output="NOT_AUTHENTICATED")
         return ToolResult(status="ok", output={
-            "tenant_name": row["tenant_name"],
-            "org_id": row["org_id"],
+            "tenantName": row["tenant_name"],
+            "orgId": row["org_id"],
             "product": row["product"],
-            "success_plan": row["success_plan"],
+            "successPlan": row["success_plan"],
             "timezone": row["timezone"],
-            "phone_number": row["phone_number"],
-            "can_create_case": row["can_create_case"],
-            "is_chat_transfer_allowed": row["is_chat_transfer_allowed"],
+            "phoneNumberForSev1": row["phone_number"],
+            "canCreateCase": row["can_create_case"],
+            "isChatTransferAllowed": row["is_chat_transfer_allowed"],
+            "isTenantSelected": True,
+            "isSeverityQuestionRequired": True,
+            "isOrgIdRequired": True,
+            "isOrgPickerDisabled": False,
+            "showDisclaimer": False,
+            "validationErrorMessage": None,
+            "tenantConfirmationText": "I can help with the following org.",
+            "orgIdHelpText": "Find your OrgID (https://help.salesforce.com/s/articleView?id=000385215&type=1)",
         })

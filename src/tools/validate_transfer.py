@@ -8,14 +8,21 @@ class ValidateAndTransferTool(Tool):
 
     async def execute(self, params, session):
         if session is None or session.auth_state is None:
-            return ToolResult(status="ok", output={"eligible": False, "reason": "NOT_AUTHENTICATED"})
+            return ToolResult(status="ok", output={
+                "isValidationPassed": False,
+                "responseMessage": "NOT_AUTHENTICATED",
+                "recommendCaseOnEscalation": True,
+            })
         if not session.auth_state.is_chat_transfer_allowed:
-            return ToolResult(status="ok", output={"eligible": False, "reason": "Chat transfer is not available for this tenant."})
-        return ToolResult(
-            status="ok",
-            output={
-                "eligible": True,
-                "session_id": session.session_id,
-                "message": "Transferring to a support engineer now.",
-            },
-        )
+            return ToolResult(status="ok", output={
+                "isValidationPassed": False,
+                "responseMessage": "Chat transfer is not available for this tenant's support plan.",
+                "recommendCaseOnEscalation": True,
+            })
+        return ToolResult(status="ok", output={
+            "isValidationPassed": True,
+            "responseMessage": f"Validation Success Session ID: {session.session_id}",
+            "recommendCaseOnEscalation": False,
+            "tenantName": session.auth_state.tenant_name,
+            "product": session.auth_state.product,
+        })

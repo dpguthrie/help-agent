@@ -41,12 +41,17 @@ class CreateCaseTool(Tool):
                 params["description"], params["severity"],
             )
         return ToolResult(status="ok", output={
-            "case_number": case_number,
-            "tenant_name": session.auth_state.tenant_name,
-            "org_id": session.auth_state.org_id,
-            "subject": params["subject"],
-            "description": params["description"],
-            "severity": params["severity"],
-            "success_plan": session.auth_state.success_plan,
-            "message": f"Case {case_number} created successfully.",
+            "output": (
+                f"Message: Your case has been created successfully! \n"
+                f"**Case Details: ** \n"
+                f"**Tenant Name: **{session.auth_state.tenant_name} \n"
+                f"**OrgId: **{session.auth_state.org_id} \n"
+                f"**Subject: **{params['subject']} \n"
+                f"**Description: **{params['description']} \n"
+                f"**Success Plan: **{session.auth_state.success_plan} \n"
+                f"**Severity Level: **{params['severity']} \n"
+                f"**Here is your Case Number: **{case_number} \n"
+                f"You can track the status or make updates here: "
+                f"[View Case](https://help.salesforce.com/s/case-view?caseId={case_number})"
+            )
         })

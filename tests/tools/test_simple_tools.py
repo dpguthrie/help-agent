@@ -35,7 +35,7 @@ async def test_validate_transfer_authenticated():
     tool = ValidateAndTransferTool()
     result = await tool.execute({}, session)
     assert result.status == "ok"
-    assert result.output["eligible"] is True
+    assert result.output["isValidationPassed"] is True
 
 
 @pytest.mark.asyncio
@@ -50,7 +50,7 @@ async def test_validate_transfer_not_allowed():
     tool = ValidateAndTransferTool()
     result = await tool.execute({}, session)
     assert result.status == "ok"
-    assert result.output["eligible"] is False
+    assert result.output["isValidationPassed"] is False
 
 
 @pytest.mark.asyncio

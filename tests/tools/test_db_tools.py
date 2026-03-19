@@ -18,8 +18,8 @@ async def test_get_user_context_authenticated(seeded_db):
     )
     result = await tool.execute({}, session)
     assert result.status == "ok"
-    assert result.output["tenant_name"] == "COMPANY_demo_001"
-    assert result.output["success_plan"] == "Premier"
+    assert result.output["tenantName"] == "COMPANY_demo_001"
+    assert result.output["successPlan"] == "Premier"
 
 
 @pytest.mark.asyncio
@@ -47,7 +47,16 @@ async def test_create_case(seeded_db):
         "timezone": "America/Chicago",
     }, session)
     assert result.status == "ok"
-    assert "case_number" in result.output
+    assert "output" in result.output
+    assert "Case Number" in result.output["output"]
+
+
+def _extract_case_number(create_result):
+    """Extract case number from the formatted markdown output string."""
+    import re
+    match = re.search(r"\*\*Here is your Case Number: \*\*(\d+)", create_result.output["output"])
+    assert match, "Case number not found in create_case output"
+    return match.group(1)
 
 
 @pytest.mark.asyncio
@@ -62,7 +71,7 @@ async def test_get_case(seeded_db):
     create_result = await create_tool.execute({
         "subject": "Test", "description": "Test", "severity": 4, "timezone": "UTC",
     }, session)
-    case_number = create_result.output["case_number"]
+    case_number = _extract_case_number(create_result)
 
     tool = GetCaseTool(seeded_db)
     result = await tool.execute({"case_number": case_number}, session)
@@ -101,7 +110,7 @@ async def test_perform_case_action_reopen(seeded_db):
     create_result = await create_tool.execute({
         "subject": "Test", "description": "Test", "severity": 4, "timezone": "UTC",
     }, session)
-    case_number = create_result.output["case_number"]
+    case_number = _extract_case_number(create_result)
 
     tool = PerformCaseActionTool(seeded_db)
     result = await tool.execute({
