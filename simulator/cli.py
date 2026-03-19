@@ -125,5 +125,25 @@ async def _preview(count, sim_model, personas, api_key):
         print(f"Expected: {scenario.get('expected_resolution', 'N/A')}")
 
 
+@cli.command()
+@click.option("--cadence", default=300, type=int, help="Seconds between batches (default: 300)")
+@click.option("--batch-size", default=5, type=int, help="Conversations per batch")
+@click.option("--concurrency", default=3, type=int, help="Max concurrent conversations per batch")
+@click.option("--sim-model", default="gpt-5-nano", help="Model for user simulation")
+@click.option("--agent-model", default=None, help="Override agent executor model")
+def service(cadence, batch_size, concurrency, sim_model, agent_model):
+    """Run as a continuous service, generating traffic at a cadence."""
+    import os
+    os.environ.setdefault("SIMULATOR_CADENCE", str(cadence))
+    os.environ.setdefault("SIMULATOR_BATCH_SIZE", str(batch_size))
+    os.environ.setdefault("SIMULATOR_CONCURRENCY", str(concurrency))
+    os.environ.setdefault("SIMULATOR_MODEL", sim_model)
+    if agent_model:
+        os.environ["SIMULATOR_AGENT_MODEL"] = agent_model
+
+    from simulator.service import main
+    main()
+
+
 if __name__ == "__main__":
     cli()

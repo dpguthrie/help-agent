@@ -33,5 +33,30 @@ services:
     ports:
       - "8000:8000"
 
+  simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://sfdc:${DB_PASSWORD:-sfdc}@db:5432/sfdc
+      - BRAINTRUST_API_KEY=${BRAINTRUST_API_KEY}
+      - CLASSIFIER_MODEL=${CLASSIFIER_MODEL:-claude-haiku-4-5}
+      - EXECUTOR_MODEL=${EXECUTOR_MODEL:-claude-sonnet-4-5}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      - CLASSIFIER_TEMPERATURE=${CLASSIFIER_TEMPERATURE:-0.0}
+      - EXECUTOR_TEMPERATURE=${EXECUTOR_TEMPERATURE:-0.2}
+      - EXECUTOR_MAX_TOKENS=${EXECUTOR_MAX_TOKENS:-4096}
+      - SIMULATOR_CADENCE=${SIMULATOR_CADENCE:-300}
+      - SIMULATOR_BATCH_SIZE=${SIMULATOR_BATCH_SIZE:-5}
+      - SIMULATOR_CONCURRENCY=${SIMULATOR_CONCURRENCY:-3}
+      - SIMULATOR_MODEL=${SIMULATOR_MODEL:-gpt-5-nano}
+      - SIMULATOR_AGENT_MODEL=${SIMULATOR_AGENT_MODEL:-}
+      - SIMULATOR_ENABLED=${SIMULATOR_ENABLED:-true}
+    profiles:
+      - simulator
+
 volumes:
   pgdata:
