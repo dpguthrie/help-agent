@@ -146,7 +146,7 @@ class TopicExecutor:
 
             # Process tool calls (non-streaming phase)
             assembled_tool_calls = [
-                {"id": tc["id"], "type": "function", "function": {"name": tc["name"], "arguments": tc["arguments"]}}
+                {"id": tc["id"], "type": "function", "function": {"name": tc["name"], "arguments": tc["arguments"] or "{}"}}
                 for tc in sorted(tool_call_deltas.values(), key=lambda t: t["id"])
             ]
 
