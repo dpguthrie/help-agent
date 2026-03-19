@@ -7,7 +7,7 @@ from tools.base import Tool, ToolResult
 
 class SearchKnowledgeTool(Tool):
     name = "search_knowledge"
-    description = "Searches the Salesforce knowledge base for articles relevant to the user's question."
+    description = "Searches the Salesforce knowledge base for articles relevant to the user's question. Returns results with relevance scores (0.0-1.0). Scores below 0.3 indicate low relevance."
     parameters = {
         "type": "object",
         "properties": {
