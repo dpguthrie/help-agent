@@ -14,7 +14,6 @@ from db.connection import get_pool, close_pool
 settings = Settings()
 _orchestrator: Orchestrator | None = None
 
-# Friendly names for tools shown in the UI
 TOOL_DISPLAY_NAMES = {
     "search_knowledge": "Searching knowledge base",
     "get_user_context": "Looking up account details",
@@ -52,7 +51,6 @@ async def on_start():
     session = SessionState(session_id=session_id)
     cl.user_session.set("session_state", session)
 
-    # Simulate authenticated user for demo
     session.auth_state = AuthState(
         tenant_name="COMPANY_demo_001",
         org_id="SFID_demo_001",
@@ -68,40 +66,43 @@ async def on_message(message: cl.Message):
     session = cl.user_session.get("session_state")
     orchestrator = await get_orchestrator()
 
-    msg = cl.Message(content="")
-    await msg.send()
+    # Single status message that updates in place during processing
+    status_msg = cl.Message(content="_Classifying intent..._", author="system")
+    await status_msg.send()
 
-    classify_step = None
-    tool_step = None
+    msg = None  # The actual response message, created when tokens start flowing
+    streaming_started = False
 
     async for chunk in orchestrator.handle_message_stream(message.content, session):
-        if chunk.type == "classify_start":
-            classify_step = cl.Step(name="Classifying intent", type="tool")
-            await classify_step.send()
-
-        elif chunk.type == "classify_end":
-            if classify_step:
-                topic_name = TOPIC_DISPLAY_NAMES.get(chunk.topic_id, chunk.topic_id)
-                classify_step.output = f"**{topic_name}** (confidence: {chunk.confidence:.0%})"
-                await classify_step.update()
+        if chunk.type == "classify_end":
+            topic_name = TOPIC_DISPLAY_NAMES.get(chunk.topic_id, chunk.topic_id)
+            status_msg.content = f"_Topic: **{topic_name}** — Generating response..._"
+            await status_msg.update()
 
         elif chunk.type == "tool_start":
             display_name = TOOL_DISPLAY_NAMES.get(chunk.tool_name, chunk.tool_name)
-            tool_step = cl.Step(name=display_name, type="tool")
-            if chunk.tool_input:
-                tool_step.input = json.dumps(chunk.tool_input, indent=2)
-            await tool_step.send()
+            status_msg.content = f"_{display_name}..._"
+            await status_msg.update()
 
         elif chunk.type == "tool_end":
-            if tool_step:
-                tool_step.output = chunk.tool_output
-                await tool_step.update()
-                tool_step = None
+            status_msg.content = f"_Generating response..._"
+            await status_msg.update()
 
         elif chunk.type == "token":
+            if not streaming_started:
+                # Remove the status message and start the real response
+                await status_msg.remove()
+                msg = cl.Message(content="")
+                await msg.send()
+                streaming_started = True
             await msg.stream_token(chunk.token)
 
-    await msg.update()
+    if msg:
+        await msg.update()
+    elif not streaming_started:
+        # Edge case: no tokens were produced
+        status_msg.content = "I'm sorry, I wasn't able to generate a response. Please try again."
+        await status_msg.update()
 
 
 @cl.on_chat_end
