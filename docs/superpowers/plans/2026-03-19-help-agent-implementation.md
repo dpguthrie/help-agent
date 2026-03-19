@@ -176,7 +176,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 COPY pyproject.toml .
-RUN pip install --no-cache-dir .
+RUN uv pip install --system --no-cache .
 
 COPY src/ src/
 COPY .chainlit/ .chainlit/ 2>/dev/null || true
@@ -287,7 +287,7 @@ def test_settings_from_env(monkeypatch):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/dpg/repos/sfdc && pip install -e ".[dev]" && PYTHONPATH=src pytest tests/test_config.py -v`
+Run: `cd /Users/dpg/repos/sfdc && uv pip install -e ".[dev]" && PYTHONPATH=src pytest tests/test_config.py -v`
 Expected: FAIL (module not found)
 
 - [ ] **Step 3: Implement config.py**
