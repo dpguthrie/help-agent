@@ -30,8 +30,10 @@ class TopicExecutor:
     def _build_messages(
         self, topic: Topic, user_message: str, session: SessionState
     ) -> list[dict]:
+        timestamp = session.session_timestamp.strftime("%Y-%m-%d %H:%M UTC") if session.session_timestamp else "unknown"
         system = (
-            f"You are a Salesforce help agent operating in the '{topic.name}' topic.\n\n"
+            f"You are a Salesforce help agent operating in the '{topic.name}' topic.\n"
+            f"Current date and time: {timestamp}\n\n"
             f"{topic.instructions}\n\n"
             "Respond in the same language the user writes in. Be concise and helpful."
         )
