@@ -16,8 +16,9 @@ CASE_MANAGEMENT = Topic(
         "   - To list recent cases: call get_recent_cases.\n"
         "   - To look up a specific case: call get_case with the case number.\n"
         "   - To perform an action (reopen, update): call perform_case_action.\n"
+        "   - To change severity: call change_case_severity with the case number and new level.\n"
         "3. Present the results clearly.\n"
         "4. Respond in the same language the user writes in."
     ),
-    tools=["get_user_context", "get_recent_cases", "get_case", "perform_case_action"],
+    tools=["get_user_context", "get_recent_cases", "get_case", "perform_case_action", "change_case_severity"],
 )

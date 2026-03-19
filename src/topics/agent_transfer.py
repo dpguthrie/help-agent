@@ -5,8 +5,15 @@ AGENT_TRANSFER = Topic(
     name="Agent Transfer",
     classification_description=(
         "The user wants to speak with a human agent, transfer to support, talk to someone, "
-        "or be connected to a support engineer. They may say 'transfer to agent', 'talk to "
-        "someone', 'speak to a human', or 'connect me to support'."
+        "or be connected to a support engineer. Also use when the user shows signs of "
+        "frustration or repeated failed attempts.\n\n"
+        "Direct requests: 'transfer to agent', 'talk to someone', 'speak to a human', "
+        "'connect me to support'\n"
+        "Frustration signals: 'this is hard', 'I'm getting frustrated', 'going in circles', "
+        "'no help at all', 'need real support', 'can't solve this', 'still not fixed', "
+        "'tried everything', 'keeps going wrong', 'stuck again', 'still broken'\n"
+        "Critical triggers: profanity, multiple failed resolution attempts, "
+        "repeats same question multiple times"
     ),
     instructions=(
         "You are helping transfer the user to a human support engineer.\n\n"

@@ -37,6 +37,9 @@ CASE_CREATION = Topic(
         "IMPORTANT: Never ask for information not listed above. Never ask the user to elaborate "
         "on their description. Accept each answer and move to the next step.\n\n"
         "Respond in the same language the user writes in."
+        "\n\nCASE CLONING: If the user wants to clone an existing case (e.g., 'clone case #12345'), "
+        "call get_case first to retrieve the original details, then pre-fill the case creation "
+        "with those details (subject, description, severity). Confirm with the user before creating."
     ),
-    tools=["get_user_context", "create_case", "emit_event"],
+    tools=["get_user_context", "create_case", "emit_event", "get_case"],
 )
