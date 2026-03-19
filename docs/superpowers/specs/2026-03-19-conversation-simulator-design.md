@@ -397,8 +397,11 @@ async def run_simulation(
     concurrency: int,
     orchestrator: Orchestrator,
     sim_client: AsyncOpenAI,  # for user sim + state tracker (gpt-5-nano)
+    sim_model: str,           # model name for user sim + state tracker
     db_pool: asyncpg.Pool,    # for random seed user selection
 ):
+    # Note: agent-model override is applied before this function is called
+    # by setting settings.executor_model before constructing the Orchestrator.
     semaphore = asyncio.Semaphore(concurrency)
     tasks = []
 
@@ -483,7 +486,10 @@ async def create_session(persona, db_pool) -> SessionState:
 # Run 100 conversations, 5 at a time
 python -m simulator run --conversations 100 --concurrency 5
 
-# Run with specific model overrides
+# Cheap run: use Haiku for the agent executor (~65% cost reduction)
+python -m simulator run --conversations 1000 --concurrency 10 --agent-model claude-haiku-4-5
+
+# Run with specific sim model
 python -m simulator run --conversations 50 --sim-model gpt-5-nano --concurrency 10
 
 # Run only edge case personas
@@ -500,6 +506,7 @@ python -m simulator preview --count 10
 | `--conversations` | 100 | Number of conversations to simulate |
 | `--concurrency` | 5 | Max concurrent conversations |
 | `--sim-model` | `gpt-5-nano` | Model for user simulation and state tracking |
+| `--agent-model` | env `EXECUTOR_MODEL` | Override the agent executor model (e.g., `claude-haiku-4-5` for cheaper runs) |
 | `--personas` | all | Glob pattern to filter persona templates |
 | `--max-turns` | 10 | Maximum turns per conversation (overrides random) |
 | `--db-url` | env `DATABASE_URL` | Postgres connection string |
@@ -530,6 +537,8 @@ session_span.log(metadata={
     "end_reason": state.end_reason,
     "final_frustration": state.frustration,
     "turns": state.turns_taken,
+    "executor_model": settings.executor_model,   # enables A/B comparison across model runs
+    "sim_model": sim_model,
 })
 ```
 
@@ -538,6 +547,7 @@ This metadata enables filtering in Braintrust:
 - `metadata.persona_id = "edge_adversarial"` to find edge case runs
 - `metadata.end_reason = "frustrated"` to find conversations that went badly
 - `metadata.final_frustration > 0.7` to find high-frustration conversations
+- `metadata.executor_model = "claude-haiku-4-5"` to compare model performance across runs
 
 ## What This Does NOT Do
 
