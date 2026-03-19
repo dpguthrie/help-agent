@@ -60,5 +60,24 @@ async def _scrape(category: str, output: str, limit: int):
     logger.info(f"Wrote {len(articles)} articles to {output}")
 
 
+@cli.command()
+@click.option("--input", "input_file", required=True, help="JSONL file from scrape command")
+@click.option("--db-url", envvar="DATABASE_URL", required=True, help="Postgres connection string")
+@click.option("--api-key", envvar="BRAINTRUST_API_KEY", required=True, help="Braintrust API key")
+@click.option("--gateway-url", default="https://gateway.braintrust.dev", help="Gateway base URL")
+@click.option("--generate-questions/--no-questions", default=True, help="Generate questions per article")
+@click.option("--force", is_flag=True, help="Re-process articles already in the database")
+def load(input_file: str, db_url: str, api_key: str, gateway_url: str, generate_questions: bool, force: bool):
+    """Load scraped articles into Postgres with embeddings."""
+    from scraper.embedder import Embedder
+    from scraper.question_gen import QuestionGenerator
+    from scraper.loader import load_articles
+
+    embedder = Embedder(gateway_base_url=gateway_url, api_key=api_key)
+    qgen = QuestionGenerator(gateway_base_url=gateway_url, api_key=api_key) if generate_questions else None
+    asyncio.run(load_articles(db_url, input_file, embedder, qgen, force=force))
+    logger.info("Load complete.")
+
+
 if __name__ == "__main__":
     cli()
