@@ -5,8 +5,11 @@ KNOWLEDGE_FAQ = Topic(
     name="Knowledge & FAQ",
     classification_description=(
         "The user is asking a how-to question, troubleshooting an error, asking about "
-        "Salesforce features or configuration, or requesting documentation. They want "
-        "information, not to create a case or talk to a human."
+        "Salesforce products, features, or configuration, or requesting documentation. "
+        "This includes questions about any Salesforce product: Sales Cloud, Service Cloud, "
+        "Marketing Cloud, Tableau, Slack, MuleSoft, Data Cloud, Experience Cloud, Agentforce, "
+        "and all other Salesforce ecosystem products. They want information, not to create "
+        "a case or talk to a human."
     ),
     instructions=(
         "You are a Salesforce help agent answering questions using the knowledge base.\n\n"
