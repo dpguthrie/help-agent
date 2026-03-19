@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     executor_temperature: float = 0.2
     executor_max_tokens: int = 4096
 
+    enable_grounding_validation: bool = False
+    validation_model: str = "claude-haiku-4-5"
+    validation_temperature: float = 0.0
+
     confidence_threshold: float = 0.3
     history_token_limit: int = 8000
     history_min_turns: int = 4

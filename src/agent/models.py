@@ -61,3 +61,4 @@ class SessionState(BaseModel):
     turn_count: int = 0
     session_timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    session_ended: bool = False

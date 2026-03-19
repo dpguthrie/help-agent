@@ -11,6 +11,12 @@ def test_settings_defaults():
     assert settings.executor_max_tokens == 4096
     assert settings.confidence_threshold == 0.3
 
+def test_settings_validation_defaults():
+    settings = Settings()
+    assert settings.enable_grounding_validation is False
+    assert settings.validation_model == "claude-haiku-4-5"
+    assert settings.validation_temperature == 0.0
+
 def test_settings_from_env(monkeypatch):
     monkeypatch.setenv("EXECUTOR_MODEL", "gpt-4o")
     monkeypatch.setenv("EXECUTOR_TEMPERATURE", "0.5")
