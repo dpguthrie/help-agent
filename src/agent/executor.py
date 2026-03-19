@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from openai import AsyncOpenAI
 from agent.config import Settings
@@ -58,57 +59,122 @@ class TopicExecutor:
         extra_headers: dict | None = None,
         trace_span: object | None = None,
     ) -> ExecutorResult:
+        """Non-streaming execution. Returns complete result."""
+        full_response = ""
+        tool_messages: list[Message] = []
+
+        async for chunk in self.execute_stream(
+            topic=topic,
+            user_message=user_message,
+            session=session,
+            extra_headers=extra_headers,
+            trace_span=trace_span,
+        ):
+            if chunk.type == "token":
+                full_response += chunk.token
+            elif chunk.type == "tool_messages":
+                tool_messages = chunk.tool_messages
+            elif chunk.type == "done":
+                full_response = chunk.response
+                tool_messages = chunk.tool_messages
+
+        return ExecutorResult(response=full_response, tool_messages=tool_messages)
+
+    async def execute_stream(
+        self,
+        topic: Topic,
+        user_message: str,
+        session: SessionState,
+        extra_headers: dict | None = None,
+        trace_span: object | None = None,
+    ) -> AsyncGenerator[StreamChunk, None]:
+        """Streaming execution. Yields tokens as they arrive, handles tool calls internally."""
         messages = self._build_messages(topic, user_message, session)
         tools = self._tool_registry.get_openai_tool_schemas(topic.tools) or None
         tool_messages: list[Message] = []
+        full_response = ""
 
         for _ in range(MAX_TOOL_ROUNDS):
-            response = await self._client.chat.completions.create(
+            stream = await self._client.chat.completions.create(
                 model=self._settings.executor_model,
                 temperature=self._settings.executor_temperature,
                 max_tokens=self._settings.executor_max_tokens,
                 messages=messages,
                 tools=tools if tools else None,
+                stream=True,
                 **({"extra_headers": extra_headers} if extra_headers else {}),
             )
 
-            choice = response.choices[0]
+            # Accumulate the streamed response
+            content_parts: list[str] = []
+            tool_call_deltas: dict[int, dict] = {}  # index -> {id, name, arguments}
+            finish_reason = None
 
-            if choice.finish_reason == "stop" or not choice.message.tool_calls:
-                return ExecutorResult(response=choice.message.content or "", tool_messages=tool_messages)
+            async for chunk in stream:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta is None:
+                    continue
 
-            assistant_tc_msg = {
+                finish_reason = chunk.choices[0].finish_reason or finish_reason
+
+                # Content tokens
+                if delta.content:
+                    content_parts.append(delta.content)
+                    yield StreamChunk(type="token", token=delta.content)
+
+                # Tool call deltas
+                if delta.tool_calls:
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index
+                        if idx not in tool_call_deltas:
+                            tool_call_deltas[idx] = {"id": "", "name": "", "arguments": ""}
+                        if tc_delta.id:
+                            tool_call_deltas[idx]["id"] = tc_delta.id
+                        if tc_delta.function:
+                            if tc_delta.function.name:
+                                tool_call_deltas[idx]["name"] = tc_delta.function.name
+                            if tc_delta.function.arguments:
+                                tool_call_deltas[idx]["arguments"] += tc_delta.function.arguments
+
+            content = "".join(content_parts)
+
+            # No tool calls - we're done
+            if not tool_call_deltas:
+                full_response = content
+                yield StreamChunk(type="done", response=full_response, tool_messages=tool_messages)
+                return
+
+            # Process tool calls (non-streaming phase)
+            assembled_tool_calls = [
+                {"id": tc["id"], "type": "function", "function": {"name": tc["name"], "arguments": tc["arguments"]}}
+                for tc in sorted(tool_call_deltas.values(), key=lambda t: t["id"])
+            ]
+
+            assistant_msg = {
                 "role": "assistant",
-                "content": choice.message.content,
-                "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-                    }
-                    for tc in choice.message.tool_calls
-                ],
+                "content": content,
+                "tool_calls": assembled_tool_calls,
             }
-            messages.append(assistant_tc_msg)
+            messages.append(assistant_msg)
             tool_messages.append(Message(
                 role="assistant",
-                content=choice.message.content or "",
-                tool_calls=assistant_tc_msg["tool_calls"],
+                content=content or "",
+                tool_calls=assembled_tool_calls,
             ))
 
-            for tc in choice.message.tool_calls:
-                tool_name = tc.function.name
+            for tc in assembled_tool_calls:
+                tool_name = tc["function"]["name"]
 
                 if tool_name not in topic.tools:
                     error_content = json.dumps({
                         "error": f"Tool '{tool_name}' is not available in the current topic ({topic.id}). Available tools: {topic.tools}"
                     })
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": error_content})
-                    tool_messages.append(Message(role="tool", content=error_content, tool_call_id=tc.id, name=tool_name))
+                    messages.append({"role": "tool", "tool_call_id": tc["id"], "content": error_content})
+                    tool_messages.append(Message(role="tool", content=error_content, tool_call_id=tc["id"], name=tool_name))
                     continue
 
                 try:
-                    params = json.loads(tc.function.arguments)
+                    params = json.loads(tc["function"]["arguments"])
                 except json.JSONDecodeError:
                     params = {}
 
@@ -123,10 +189,18 @@ class TopicExecutor:
                     tool_span.end()
 
                 result_content = json.dumps(result.output) if isinstance(result.output, dict) else str(result.output)
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_content})
-                tool_messages.append(Message(role="tool", content=result_content, tool_call_id=tc.id, name=tool_name))
+                messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result_content})
+                tool_messages.append(Message(role="tool", content=result_content, tool_call_id=tc["id"], name=tool_name))
 
-        return ExecutorResult(
-            response="I'm having trouble completing this request. Please try again.",
-            tool_messages=tool_messages,
-        )
+            # Loop back for the next LLM call (post-tool-execution), which will stream the final response
+
+        full_response = "I'm having trouble completing this request. Please try again."
+        yield StreamChunk(type="done", response=full_response, tool_messages=tool_messages)
+
+
+@dataclass
+class StreamChunk:
+    type: str  # "token", "tool_messages", "done"
+    token: str = ""
+    response: str = ""
+    tool_messages: list[Message] = field(default_factory=list)

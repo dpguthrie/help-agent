@@ -5,7 +5,8 @@ import asyncpg
 
 from agent.classifier import TopicClassifier
 from agent.config import Settings
-from agent.executor import TopicExecutor, ExecutorResult
+from collections.abc import AsyncGenerator
+from agent.executor import TopicExecutor, ExecutorResult, StreamChunk
 from agent.history import truncate_history
 from agent.models import Message, SessionState
 from tools.datetime_tool import GetDateTimeTool
@@ -151,3 +152,81 @@ class Orchestrator:
         turn_span.end()
 
         return exec_result.response
+
+    async def handle_message_stream(
+        self, user_message: str, session: SessionState
+    ) -> AsyncGenerator[StreamChunk, None]:
+        """Streaming version of handle_message. Yields StreamChunks with tokens."""
+        session_span = self._get_session_span(session)
+        turn_span = session_span.start_span(name=f"turn.{session.turn_count}")
+
+        # Bootstrap: set timestamp on first turn
+        if session.turn_count == 0:
+            dt_tool = self._tool_registry.get("get_datetime")
+            if dt_tool:
+                result = await dt_tool.execute({}, session)
+                session.session_timestamp = datetime.fromisoformat(result.output)
+
+        # Truncate history
+        truncated_history = truncate_history(
+            session.conversation_history,
+            max_tokens=self._settings.history_token_limit,
+            min_turns=self._settings.history_min_turns,
+        )
+
+        # Phase 1: Classify (non-streaming, fast)
+        classify_span = turn_span.start_span(name="classify")
+        bt_header = classify_span.export()
+        classify_headers = {"x-bt-parent": bt_header} if bt_header else None
+        classify_result = await self._classifier.classify(
+            user_message, truncated_history, extra_headers=classify_headers,
+        )
+        classify_span.log(output={"topic_id": classify_result.topic_id, "confidence": classify_result.confidence})
+        classify_span.end()
+
+        topic_id = classify_result.topic_id
+        topic = self._topic_registry.get(topic_id)
+        if topic is None:
+            topic = self._topic_registry.get("off_topic")
+            topic_id = "off_topic"
+
+        topic_changed = session.current_topic != topic_id
+        session.current_topic = topic_id
+
+        # Phase 2: Execute (streaming)
+        execute_span = turn_span.start_span(name="execute")
+        bt_header = execute_span.export()
+        execute_headers = {"x-bt-parent": bt_header} if bt_header else None
+
+        full_response = ""
+        tool_messages: list[Message] = []
+
+        async for chunk in self._executor.execute_stream(
+            topic=topic,
+            user_message=user_message,
+            session=session,
+            extra_headers=execute_headers,
+            trace_span=execute_span,
+        ):
+            if chunk.type == "token":
+                yield chunk
+            elif chunk.type == "done":
+                full_response = chunk.response
+                tool_messages = chunk.tool_messages
+
+        execute_span.log(output={"response": full_response[:200], "tool_calls_count": len(tool_messages)})
+        execute_span.end()
+
+        # Update session
+        session.conversation_history.append(Message(role="user", content=user_message))
+        for msg in tool_messages:
+            session.conversation_history.append(msg)
+        session.conversation_history.append(Message(role="assistant", content=full_response))
+        session.turn_count += 1
+
+        turn_span.log(
+            input=user_message,
+            output=full_response,
+            metadata={"topic": topic_id, "topic_changed": topic_changed},
+        )
+        turn_span.end()

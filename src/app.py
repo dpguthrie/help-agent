@@ -44,8 +44,14 @@ async def on_message(message: cl.Message):
     session = cl.user_session.get("session_state")
     orchestrator = await get_orchestrator()
 
-    response = await orchestrator.handle_message(message.content, session)
-    await cl.Message(content=response).send()
+    msg = cl.Message(content="")
+    await msg.send()
+
+    async for chunk in orchestrator.handle_message_stream(message.content, session):
+        if chunk.type == "token":
+            await msg.stream_token(chunk.token)
+
+    await msg.update()
 
 
 @cl.on_chat_end
