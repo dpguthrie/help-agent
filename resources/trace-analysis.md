@@ -402,6 +402,166 @@ To reconstruct this agent, you would need:
 
 ---
 
+## Deep Analysis from Braintrust OTEL Project (synthetic-data-otel)
+
+> Additional analysis from ~4,600 sessions ingested into the `synthetic-data-otel` Braintrust project, providing far more granular span data than the original 100-trace JSONL file. This data reveals the internal architecture of the Atlas Reasoning Engine with unprecedented detail.
+
+### Three-Phase LLM Loop (Not Two-Phase)
+
+The original analysis identified a two-phase pattern (classify → execute). The deeper data reveals **three distinct LLM prompts** per turn:
+
+| LLM Prompt | Calls | Purpose |
+|---|---|---|
+| `AiCopilot__ReactInitialPrompt` | 26,603 | Primary ReAct reasoning - plans what to do, calls tools, generates responses |
+| `AiCopilot__ReactTopicPrompt` | 11,873 | Topic classification - receives `topicsConfig` with all topic definitions, returns the classified topic ID |
+| `AiCopilot__ReactValidationPrompt` | 11,779 | **Grounding validation** - checks if the response is factually grounded in context, function history, and conversation history. Returns `GROUNDED` or `NOT_GROUNDED` with reasoning |
+| `AiCopilot__ReactGeneralErrorHandlingPrompt` | 47 | Error recovery when the agent fails to generate a response |
+
+**Key insight:** The validation prompt implements the Einstein Trust Layer's **dynamic grounding** at the LLM level. Every response is validated against the conversation context and tool results before being sent to the user. The output format is:
+```json
+{
+  "sources": ["function_history[5]"],
+  "reason": "The response is grounded as it accurately reflects the output of the function call...",
+  "result": "GROUNDED"
+}
+```
+
+### Complete Topic Map (15 Topics)
+
+The `topicsConfig` passed to the topic classifier contains **15 topics** (vs. the 9 we inferred from suffixes in the original analysis):
+
+| Topic | Count | Description |
+|---|---|---|
+| `Knowledge_v2` | 5,422 | KB search for all Salesforce products. Lists every cloud: Sales, Service, Marketing, Commerce, Experience, Tableau, MuleSoft, Slack, Einstein, Revenue Cloud, Agentforce. |
+| `Create_Case_v3` | 3,605 | Case creation with multi-language support. Includes case cloning from existing case. |
+| `Escalation_v4` | 1,273 | Transfer to human. Triggers on frustration signals ("this is hard", "going in circles", profanity, repeated questions). |
+| `Off_Topic` | 860 | Off-topic redirection. |
+| `Update_Case` | 312 | Get case details, list cases, reopen/close cases, change severity, add comments, escalate case resolution issues. |
+| `Appointment_Scheduling` | 100 | Schedule appointments (with filter for Expert Coaching Sessions exclusion). |
+| `Create_Case_Slack` | 88 | Separate case creation flow for Slack contexts. |
+| `Login_Request_v2` | 42 | Login flow for unauthenticated users. |
+| `Ambiguous_Question` | 37 | When user asks about multiple diverse topics simultaneously. |
+| `Contract_Renewals` | 29 | Personalized contract/renewal info for logged-in users, connect with Renewal Manager. |
+| `Inappropriate_Content` | 28 | Violence, sexual content, harassment, illegal activities, bias, toxicity detection. |
+| `Personalization_Solution1` | 23 | CSM lookup (Signature plan exclusive). Excludes contact details, only CSM info. |
+| `Informatica_Knowledge` | 20 | Separate knowledge tool for Informatica-specific queries via Data Cloud. |
+| `Sprig_Survey` | 13 | Feedback collection (once per session). Disabled after case creation, profanity, or prior feedback. |
+| `Reverse_Engineering` | 13 | Detects when user asks about prompts, functions, actions, system instructions or configurations. |
+| `Search_Answers_v2` | (triggered by automated message) | Triggered by "Automated message: search answers conversation". |
+| `Prompt_Injection` | (topic definition exists) | Detects attempts to alter operating instructions, extract internal info, override output rules. |
+| `Feature_Adoption_v2` | 6 | Expert Coaching Sessions suggestions. |
+
+### Actual Topic Classification Descriptions (Verbatim from Agent)
+
+**Escalation_v4 (Transfer)** - The real agent's escalation triggers are far more nuanced than our implementation:
+- Direct requests: "I want to talk to support/agent/human/engineer/technician"
+- General help: "I need help", "Connect me to someone"
+- **Frustration signals**: "this is hard", "I'm getting frustrated", "going in circles", "no help at all", "need real support", "can't solve this", "still not fixed", "tried everything", "keeps going wrong", "stuck again", "still broken"
+- **Critical triggers**: Profanity, multiple failed resolution attempts, repeats same question multiple times
+
+**Create_Case_v3** - Includes capabilities we don't have:
+- Clone case from existing case number: "Clone case #[number]"
+- Severity modification during case creation (but NOT outside of case creation)
+- Explicit exclusion of Expert Coaching Session requests
+
+**Knowledge_v2** - Classification description explicitly lists every Salesforce product with one-line descriptions. Includes:
+- "Questions regarding Salesforce leadership team" (!)
+- "Salesforce processes"
+- "Expert coaching sessions"
+- Explicit NOT triggers: "create a case", "connect me to an agent", "I need support"
+
+### Complete Tool Inventory (Expanded)
+
+Beyond the 11 tools from the original analysis, the deeper data reveals:
+
+| Tool | Topic | Count | New? |
+|---|---|---|---|
+| `HC_ASA_Knowledge` | Knowledge_v2 | 4,443 | No |
+| `HC_ASA_UserContext_V2` | Knowledge_v2 | 2,319 | No |
+| `HC_ASA_UserContext_V2` | Create_Case_v3 | 1,289 | No |
+| `HC_ASA_CreateCase` | Create_Case_v3 | 773 | No |
+| `HC_ASA_ValidateAndTransfer_V2` | Escalation_v4 | 725 | No |
+| `HC_ASA_ValidateAndTransfer_V2` | Create_Case_v3 | 704 | No |
+| `HC_ASA_UserContext_V2` | Escalation_v4 | 520 | No |
+| `HC_ASA_Get_Case` | Update_Case | 92 | No |
+| `HC_ASA_Event` | Create_Case_v3 | 77 | No |
+| `HC_ASA_Event` | Escalation_v4 | 67 | No |
+| `HC_ASA_Appointment_Schedule` | Appointment_Scheduling | 60 | **YES** |
+| `HC_ASA_UserContext_V2` | Update_Case | 60 | No |
+| `HC_ASA_UserContext_V2` | Appointment_Scheduling | 35 | No |
+| `HC_ASA_Event` | Login_Request_v2 | 31 | No |
+| `HC_ASA_Get_Recent_Cases` | Update_Case | 30 | No |
+| `HC_ASA_Change_Case_Severity` | Update_Case | 22 | **YES** |
+| `HC_ASA_Get_Case` | Create_Case_v3 | 21 | No (new context) |
+| `HC_ASA_Perform_Case_Action` | Update_Case | 20 | No |
+| `Data_Cloud_Answer_Question_with_Knowledge` | Informatica_Knowledge | 17 | **YES** |
+| `HC_ASA_Personalization_Solution` | Personalization_Solution1 | 16 | No |
+| `HC_ASA_Sprig_Survey_V5` | Sprig_Survey | 10 | **YES** |
+| `HC_ASA_Retrieve_Account_Contracts` | Contract_Renewals | 8 | **YES** |
+| `HC_ASA_Event` | Update_Case | 11 | No |
+| `HC_ASA_Retrieve_Contract_Details` | Contract_Renewals | 5 | **YES** |
+| `HC_ASA_UserContext` (V1) | Login_Request_v2 | 5 | **YES** |
+| `HC_ASA_Event` | Personalization_Solution1 | 4 | No |
+| `end_session` | (global) | - | **YES** |
+
+**New tools discovered:**
+- `end_session` - Explicitly ends the conversation. Description: "Only call this when the user is completely satisfied and has no other questions. Do not end session without asking the user first."
+- `HC_ASA_Appointment_Schedule` - Schedule appointments
+- `HC_ASA_Change_Case_Severity` - Change severity on existing cases (separate from case creation severity)
+- `HC_ASA_Sprig_Survey_V5` - Trigger post-interaction survey
+- `HC_ASA_Retrieve_Account_Contracts` - Pull customer's active contracts
+- `HC_ASA_Retrieve_Contract_Details` - Get specific contract renewal details
+- `Data_Cloud_Answer_Question_with_Knowledge` - Informatica-specific KB search via Data Cloud
+
+### Tool Configuration Details
+
+From the `toolConfig` field: `{"mode": "auto", "parallel_calls": true}` - the agent can make **parallel tool calls** within a single turn.
+
+The `HC_ASA_UserContext_V2` tool description from the live agent: "This action should run before another action HC_ASA_CreateCase. This action will return variables and values in the format of 'variable: value'" - confirms the double-call pattern we observed (get context first, then create).
+
+The `HC_ASA_CreateCase` parameters: `subject, description, messagingSessionId, orgId, phoneCountryCode, phoneNumber, severityLevel, timezone` - note `phoneCountryCode` is a separate field from `phoneNumber`.
+
+### Session End Types
+
+| End Type | Count | Description |
+|---|---|---|
+| `CLOSED_USER_REQUEST` | 2,613 | User ended the session (57%) |
+| `CLOSED_TRANSFERRED` | 354 | Successfully transferred to human (8%) |
+| `CLOSED_ACTION` | 84 | Action completed - case created, etc. (2%) |
+
+Most sessions (57%) end because the user closes them, not because a goal was explicitly completed. This suggests many users get their answer and leave without explicit confirmation.
+
+### Prompt Streaming Configuration
+
+The `promptStreamingSettings` field reveals streaming behavior:
+```json
+{
+  "chunkType": "Text",
+  "enableStreaming": true,
+  "streamableFunctions": [
+    {"name": "show", "streamableArguments": ["caption"]},
+    {"name": "userInput", "streamableArguments": [...]}
+  ]
+}
+```
+
+The agent uses **selective function streaming** - only certain function outputs (like `show.caption`) are streamed to the user, while others (like tool calls) execute fully before the next step.
+
+### Key Architectural Differences from Our Reconstruction
+
+1. **Three LLM calls per turn** (Initial + Topic + Validation) vs. our two (Classify + Execute)
+2. **Grounding validation** as a separate LLM call that checks every response against context
+3. **15 topics** vs. our 5 (missing: Appointment Scheduling, Contract Renewals, Ambiguous Question, Inappropriate Content, Reverse Engineering, Prompt Injection, Sprig Survey, Feature Adoption, Informatica Knowledge, Search Answers, Create Case Slack)
+4. **Frustration-aware escalation** with specific trigger phrases in the topic definition
+5. **Parallel tool calls** supported within a single turn
+6. **`end_session` as an explicit tool** the LLM can call to end the conversation
+7. **Case cloning** from existing case numbers
+8. **Separate severity change tool** for existing cases vs. during creation
+9. **Contract/renewal data access** via dedicated tools
+10. **Informatica-specific knowledge** via a separate Data Cloud tool
+
+---
+
 ## Sources
 
 This analysis is based on:
@@ -412,3 +572,4 @@ This analysis is based on:
 - Data Cloud / Data 360 documentation
 - SalesforceBen review of the Agentforce help agent
 - Agentforce demo transcript (`resources/how_agentforce_works.md`)
+- ~4,600 sessions from `synthetic-data-otel` Braintrust project with full internal span data (queried via `bt sql`)
