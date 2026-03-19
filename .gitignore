@@ -6,3 +6,6 @@ __pycache__/
 dist/
 build/
 .chainlit/
+scraped_*.jsonl
+all_articles.jsonl
+uv.lock
