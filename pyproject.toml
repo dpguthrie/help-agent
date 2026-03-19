@@ -1,0 +1,38 @@
+[project]
+name = "sfdc-help-agent"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=1.40.0",
+    "braintrust>=0.0.160",
+    "chainlit>=1.1.0",
+    "asyncpg>=0.29.0",
+    "pgvector>=0.3.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "tiktoken>=0.7.0",
+    "numpy>=1.26.0",
+]
+
+[project.optional-dependencies]
+scraper = [
+    "playwright>=1.45.0",
+    "click>=8.1.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.14.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

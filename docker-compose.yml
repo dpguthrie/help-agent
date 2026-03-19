@@ -1,0 +1,37 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d
+    environment:
+      POSTGRES_DB: sfdc
+      POSTGRES_USER: sfdc
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sfdc}
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sfdc"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  agent:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://sfdc:${DB_PASSWORD:-sfdc}@db:5432/sfdc
+      - BRAINTRUST_API_KEY=${BRAINTRUST_API_KEY}
+      - CLASSIFIER_MODEL=${CLASSIFIER_MODEL:-claude-haiku-4-5}
+      - EXECUTOR_MODEL=${EXECUTOR_MODEL:-claude-sonnet-4-5}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      - CLASSIFIER_TEMPERATURE=${CLASSIFIER_TEMPERATURE:-0.0}
+      - EXECUTOR_TEMPERATURE=${EXECUTOR_TEMPERATURE:-0.2}
+      - EXECUTOR_MAX_TOKENS=${EXECUTOR_MAX_TOKENS:-4096}
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
