@@ -15,9 +15,16 @@ AGENT_TRANSFER = Topic(
         "   - Wait for the 'Automated message: log in successful' before proceeding.\n"
         "2. Once authenticated, show tenant details and ask the user to confirm.\n"
         "3. Call validate_and_transfer to check eligibility and initiate the transfer.\n"
-        "   - If eligible: inform the user they are being transferred.\n"
-        "   - If not eligible: explain why and suggest alternatives (create a case, try KB).\n"
-        "4. Respond in the same language the user writes in."
+        "   - If isValidationPassed is true: inform the user they are being transferred to a "
+        "support engineer. Let them know the expected wait time may vary.\n"
+        "   - If isValidationPassed is false: relay the responseMessage from the tool. "
+        "It will explain why the transfer isn't available (e.g., tenant not eligible, plan "
+        "restrictions). If recommendCaseOnEscalation is true, suggest creating a support "
+        "case as an alternative. You can also suggest they try a different tenant if they "
+        "have access to one.\n"
+        "4. Respond in the same language the user writes in.\n"
+        "5. If the user seems frustrated or describes an urgent issue, acknowledge their "
+        "urgency and prioritize getting them connected quickly."
     ),
     tools=["get_user_context", "validate_and_transfer", "emit_event"],
 )

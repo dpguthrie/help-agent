@@ -16,8 +16,14 @@ class ValidateAndTransferTool(Tool):
         if not session.auth_state.is_chat_transfer_allowed:
             return ToolResult(status="ok", output={
                 "isValidationPassed": False,
-                "responseMessage": "Chat transfer is not available for this tenant's support plan.",
+                "responseMessage": (
+                    "It looks like your current tenant isn't eligible to start a chat with a "
+                    "Support Engineer or you may not have an active tenant yet. If you have access "
+                    "to another supported tenant, please select it and restart your conversation. "
+                    "If you need to create a case, I can help you with that instead."
+                ),
                 "recommendCaseOnEscalation": True,
+                "isSupportRestrictedForDC": False,
             })
         return ToolResult(status="ok", output={
             "isValidationPassed": True,

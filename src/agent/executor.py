@@ -31,11 +31,26 @@ class TopicExecutor:
         self, topic: Topic, user_message: str, session: SessionState
     ) -> list[dict]:
         timestamp = session.session_timestamp.strftime("%Y-%m-%d %H:%M UTC") if session.session_timestamp else "unknown"
+
+        # Build user context block if authenticated
+        user_context = ""
+        if session.auth_state:
+            user_context = (
+                f"\nAuthenticated user context:\n"
+                f"  Tenant: {session.auth_state.tenant_name}\n"
+                f"  Product: {session.auth_state.product}\n"
+                f"  Success Plan: {session.auth_state.success_plan}\n"
+            )
+
         system = (
             f"You are a Salesforce help agent operating in the '{topic.name}' topic.\n"
-            f"Current date and time: {timestamp}\n\n"
+            f"Current date and time: {timestamp}\n"
+            f"{user_context}\n"
             f"{topic.instructions}\n\n"
-            "Respond in the same language the user writes in. Be concise and helpful."
+            "IMPORTANT: Always respond in the same language the user writes in. "
+            "You support English, Japanese, French, German, Italian, Portuguese, and Spanish. "
+            "If the user writes in any of these languages, respond in that language. "
+            "Be concise and helpful."
         )
 
         messages: list[dict] = [{"role": "system", "content": system}]
