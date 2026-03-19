@@ -37,6 +37,7 @@ async def update_state(
                 "role": "system",
                 "content": (
                     "You track the state of a customer support conversation. "
+                    "You must behave like a REAL customer would. "
                     "Respond with ONLY a JSON object, no other text."
                 ),
             },
@@ -47,12 +48,21 @@ async def update_state(
                     f"User patience: {persona.patience} (0=impatient, 1=patient)\n"
                     f"Current state: {json.dumps({'goal_progress': current_state.goal_progress, 'frustration': current_state.frustration, 'turns_taken': current_state.turns_taken})}\n\n"
                     f"Agent just responded: \"{agent_response[:500]}\"\n\n"
+                    "IMPORTANT behavioral rules for realistic simulation:\n"
+                    "- If the agent says it doesn't have information or can't help, a real user would NOT "
+                    "keep asking the same question. They would either: ask to create a case, ask to transfer "
+                    "to a human, try a different question, or give up.\n"
+                    "- If the agent has deflected/said 'I don't have info' twice, set next_behavior to "
+                    "'ask_to_transfer' or 'ask_to_create_case' and increase frustration significantly.\n"
+                    "- If the agent successfully answered with KB articles and URLs, the goal may be achieved.\n"
+                    "- If the agent created a case or initiated a transfer, the goal IS achieved.\n"
+                    "- Real users don't repeat the same request more than twice.\n\n"
                     f"Update the state. Respond with JSON:\n"
                     f'{{"goal_progress": "advancing|stalled|achieved|abandoned",'
                     f' "frustration": <0.0-1.0>,'
                     f' "should_end": true|false,'
                     f' "end_reason": null|"goal_achieved"|"frustrated"|"gave_up",'
-                    f' "next_behavior": "answer_question|express_frustration|ask_to_transfer|say_thanks|change_topic|provide_info|clarify|say_goodbye"}}'
+                    f' "next_behavior": "answer_question|express_frustration|ask_to_transfer|ask_to_create_case|say_thanks|change_topic|provide_info|clarify|say_goodbye"}}'
                 ),
             },
         ],

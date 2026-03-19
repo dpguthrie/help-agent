@@ -32,6 +32,10 @@ async def run_simulation(
     semaphore = asyncio.Semaphore(concurrency)
     results = []
 
+    # Fetch KB topics once for all conversations
+    kb_topics = await _fetch_kb_topics(db_pool)
+    logger.info(f"KB topics available: {len(kb_topics)} ({', '.join(kb_topics[:10])}...)")
+
     async def run_one(conv_id: int):
         async with semaphore:
             persona = get_random_persona(persona_pattern)
@@ -46,6 +50,7 @@ async def run_simulation(
                     sim_model=sim_model,
                     session=session,
                     max_turns=max_turns,
+                    kb_topics=kb_topics,
                 )
                 logger.info(
                     f"[{conv_id}] Done: {result['end_reason']} after {result['turns']} turns "
@@ -68,9 +73,10 @@ async def run_conversation(
     sim_model: str,
     session: SessionState,
     max_turns: int = 10,
+    kb_topics: list[str] | None = None,
 ) -> dict:
-    # Generate scenario
-    scenario = await generate_scenario(sim_client, sim_model, persona)
+    # Generate scenario grounded in available KB topics
+    scenario = await generate_scenario(sim_client, sim_model, persona, kb_topics=kb_topics)
     user_message = scenario.get("opening_message", "I need help with Salesforce")
 
     state = ConversationState()
@@ -148,3 +154,27 @@ async def create_session(persona: PersonaTemplate, db_pool: asyncpg.Pool) -> Ses
         )
 
     return session
+
+
+async def _fetch_kb_topics(db_pool: asyncpg.Pool) -> list[str]:
+    """Fetch a summary of available KB topics from the database."""
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT DISTINCT title
+            FROM articles
+            WHERE title IS NOT NULL AND title != ''
+            ORDER BY random()
+            LIMIT 50
+        """)
+        titles = [r["title"] for r in rows]
+
+        # Also get category-level summary
+        cats = await conn.fetch("""
+            SELECT product_category, count(*) as cnt
+            FROM articles
+            GROUP BY product_category
+            ORDER BY cnt DESC
+        """)
+        categories = [f"{r['product_category']} ({r['cnt']} articles)" for r in cats]
+
+    return categories + titles

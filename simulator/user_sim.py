@@ -19,8 +19,18 @@ EDGE_CASE_INSTRUCTIONS = {
 
 
 async def generate_scenario(
-    client: AsyncOpenAI, model: str, persona: PersonaTemplate
+    client: AsyncOpenAI, model: str, persona: PersonaTemplate,
+    kb_topics: list[str] | None = None,
 ) -> dict:
+    # Build KB context hint if available
+    kb_hint = ""
+    if kb_topics:
+        kb_hint = (
+            f"\nThe knowledge base has articles covering these topics: {', '.join(kb_topics[:30])}.\n"
+            f"For knowledge-type scenarios, generate questions about topics that are IN this list "
+            f"so the agent can actually find relevant articles. Do NOT ask about topics not covered.\n"
+        )
+
     response = await client.chat.completions.create(
         model=model,
         temperature=0.9,
@@ -40,7 +50,8 @@ async def generate_scenario(
                     f"- Technical level: {persona.technical_level}\n"
                     f"- Language: {persona.language}\n"
                     f"- Goal: {persona.goal_type}\n"
-                    f"- Topic areas: {', '.join(persona.topic_areas)}\n\n"
+                    f"- Topic areas: {', '.join(persona.topic_areas)}\n"
+                    f"{kb_hint}\n"
                     f"IMPORTANT: The opening_message must be SHORT (1-2 sentences, under 150 characters). "
                     f"Real customers write brief messages like 'How do I reset my password?' not paragraphs.\n\n"
                     f"Respond with JSON:\n"
