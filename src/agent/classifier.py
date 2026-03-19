@@ -1,9 +1,18 @@
 from __future__ import annotations
 import json
+import re
 from openai import AsyncOpenAI
 from agent.config import Settings
 from agent.models import ClassifierResult, Message
 from topics.registry import TopicRegistry
+
+
+def _extract_json(text: str) -> dict:
+    """Extract JSON from text that may be wrapped in markdown code fences."""
+    # Strip markdown code fences if present
+    cleaned = re.sub(r"```(?:json)?\s*", "", text).strip()
+    cleaned = cleaned.rstrip("`").strip()
+    return json.loads(cleaned)
 
 
 class TopicClassifier:
@@ -34,7 +43,6 @@ class TopicClassifier:
         response = await self._client.chat.completions.create(
             model=self._settings.classifier_model,
             temperature=self._settings.classifier_temperature,
-            response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
@@ -42,14 +50,14 @@ class TopicClassifier:
             **({"extra_headers": extra_headers} if extra_headers else {}),
         )
 
-        content = response.choices[0].message.content
+        content = response.choices[0].message.content or ""
         try:
-            data = json.loads(content)
+            data = _extract_json(content)
             result = ClassifierResult(
                 topic_id=data.get("topic_id", "off_topic"),
                 confidence=float(data.get("confidence", 0.0)),
             )
-        except (json.JSONDecodeError, ValueError):
+        except (json.JSONDecodeError, ValueError, KeyError):
             result = ClassifierResult(topic_id="off_topic", confidence=0.0)
 
         if result.confidence < self._settings.confidence_threshold:

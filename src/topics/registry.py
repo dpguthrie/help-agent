@@ -21,11 +21,12 @@ class TopicRegistry:
         return list(self._topics.values())
 
     def classification_prompt(self) -> str:
-        lines = ["Classify the user's intent into one of these topics:\n"]
+        lines = ["Classify the user's intent into exactly one of these topics:\n"]
         for topic in self._topics.values():
             lines.append(f"- **{topic.id}**: {topic.classification_description}")
         lines.append(
-            "\nRespond with JSON: {\"topic_id\": \"<id>\", \"confidence\": <0.0-1.0>}"
+            '\nYou MUST respond with ONLY a JSON object in this exact format, no other text:'
+            '\n{"topic_id": "<id>", "confidence": <0.0-1.0>}'
         )
         return "\n".join(lines)
 
