@@ -25,7 +25,7 @@ from topics.registry import get_default_registry
 
 
 class _NoopSpan:
-    def start_span(self, **kw):
+    def start_span(self, **kw):  # accepts name=, span_attributes=, etc.
         return _NoopSpan()
 
     def log(self, **kw):
@@ -88,7 +88,7 @@ class Orchestrator:
 
     async def handle_message(self, user_message: str, session: SessionState) -> str:
         session_span = self._get_session_span(session)
-        turn_span = session_span.start_span(name=f"turn.{session.turn_count}")
+        turn_span = session_span.start_span(name=f"turn.{session.turn_count}", span_attributes={"type": "task"})
 
         # Bootstrap: set timestamp on first turn
         if session.turn_count == 0:
@@ -105,7 +105,7 @@ class Orchestrator:
         )
 
         # Phase 1: Classify
-        classify_span = turn_span.start_span(name="classify")
+        classify_span = turn_span.start_span(name="classify", span_attributes={"type": "task"})
         bt_header = classify_span.export()
         classify_headers = {"x-bt-parent": bt_header} if bt_header else None
         classify_result = await self._classifier.classify(
@@ -124,7 +124,7 @@ class Orchestrator:
         session.current_topic = topic_id
 
         # Phase 2: Execute
-        execute_span = turn_span.start_span(name="execute")
+        execute_span = turn_span.start_span(name="execute", span_attributes={"type": "task"})
         bt_header = execute_span.export()
         execute_headers = {"x-bt-parent": bt_header} if bt_header else None
         exec_result = await self._executor.execute(
@@ -158,7 +158,7 @@ class Orchestrator:
     ) -> AsyncGenerator[StreamChunk, None]:
         """Streaming version of handle_message. Yields StreamChunks with tokens."""
         session_span = self._get_session_span(session)
-        turn_span = session_span.start_span(name=f"turn.{session.turn_count}")
+        turn_span = session_span.start_span(name=f"turn.{session.turn_count}", span_attributes={"type": "task"})
 
         # Bootstrap: set timestamp on first turn
         if session.turn_count == 0:
@@ -175,7 +175,7 @@ class Orchestrator:
         )
 
         # Phase 1: Classify (non-streaming, fast)
-        classify_span = turn_span.start_span(name="classify")
+        classify_span = turn_span.start_span(name="classify", span_attributes={"type": "task"})
         bt_header = classify_span.export()
         classify_headers = {"x-bt-parent": bt_header} if bt_header else None
         classify_result = await self._classifier.classify(
@@ -194,7 +194,7 @@ class Orchestrator:
         session.current_topic = topic_id
 
         # Phase 2: Execute (streaming)
-        execute_span = turn_span.start_span(name="execute")
+        execute_span = turn_span.start_span(name="execute", span_attributes={"type": "task"})
         bt_header = execute_span.export()
         execute_headers = {"x-bt-parent": bt_header} if bt_header else None
 

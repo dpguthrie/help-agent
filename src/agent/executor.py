@@ -180,7 +180,7 @@ class TopicExecutor:
 
                 tool_span = None
                 if trace_span:
-                    tool_span = trace_span.start_span(name=f"tool_call.{tool_name}")
+                    tool_span = trace_span.start_span(name=f"tool_call.{tool_name}", span_attributes={"type": "tool"})
 
                 result = await self._tool_registry.execute(tool_name, params, session)
 
