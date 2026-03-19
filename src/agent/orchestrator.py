@@ -9,14 +9,19 @@ from collections.abc import AsyncGenerator
 from agent.executor import TopicExecutor, ExecutorResult, StreamChunk
 from agent.history import truncate_history
 from agent.models import Message, SessionState
+from agent.validator import GroundingValidator
 from tools.datetime_tool import GetDateTimeTool
 from tools.emit_event import EmitEventTool
+from tools.end_session import EndSessionTool
 from tools.knowledge import SearchKnowledgeTool
 from tools.user_context import GetUserContextTool
 from tools.create_case import CreateCaseTool
 from tools.get_case import GetCaseTool
 from tools.get_recent_cases import GetRecentCasesTool
 from tools.perform_case_action import PerformCaseActionTool
+from tools.schedule_appointment import ScheduleAppointmentTool
+from tools.retrieve_contracts import RetrieveAccountContractsTool, RetrieveContractDetailsTool
+from tools.change_case_severity import ChangeCaseSeverityTool
 from tools.validate_transfer import ValidateAndTransferTool
 from tools.raise_flag import RaiseFlagTool
 from tools.get_personalization import GetPersonalizationTool
@@ -45,6 +50,7 @@ class Orchestrator:
         self._tool_registry = self._build_tool_registry(settings, db_pool)
         self._classifier = TopicClassifier(settings=settings, topic_registry=self._topic_registry)
         self._executor = TopicExecutor(settings=settings, tool_registry=self._tool_registry)
+        self._validator = GroundingValidator(settings=settings)
         self._session_spans: dict[str, object] = {}
 
         # Try to init tracing, fall back to noop
@@ -60,9 +66,15 @@ class Orchestrator:
         registry = ToolRegistry()
         registry.register(GetDateTimeTool())
         registry.register(EmitEventTool())
+        registry.register(EndSessionTool())
+        registry.register(ScheduleAppointmentTool())
+        registry.register(RetrieveAccountContractsTool())
+        registry.register(RetrieveContractDetailsTool())
         registry.register(ValidateAndTransferTool())
         registry.register(RaiseFlagTool())
         registry.register(GetPersonalizationTool())
+        if pool is not None:
+            registry.register(ChangeCaseSeverityTool(pool))
         if pool is not None:
             registry.register(GetUserContextTool(pool))
             registry.register(CreateCaseTool(pool))
@@ -144,6 +156,33 @@ class Orchestrator:
             metadata={"tool_calls_count": len(exec_result.tool_messages), "topic": topic_id},
         )
         execute_span.end()
+
+        # Check for end_session
+        for msg in exec_result.tool_messages:
+            if msg.name == "end_session":
+                session.session_ended = True
+
+        # Optional grounding validation
+        if self._settings.enable_grounding_validation and not session.session_ended:
+            validate_span = turn_span.start_span(name="validate", span_attributes={"type": "task"})
+            tool_results = [{"tool": m.name, "output": m.content} for m in exec_result.tool_messages if m.role == "tool"]
+            bt_header = validate_span.export()
+            validate_headers = {"x-bt-parent": bt_header} if bt_header else None
+            validation = await self._validator.validate(
+                response=exec_result.response,
+                tool_results=tool_results,
+                conversation_context=[{"role": m.role, "content": m.content} for m in truncated_history[-6:]],
+                extra_headers=validate_headers,
+            )
+            validate_span.log(output={"is_grounded": validation.is_grounded, "reason": validation.reason})
+            validate_span.end()
+
+            if not validation.is_grounded:
+                exec_result = await self._executor.execute(
+                    topic=topic, user_message=user_message, session=session,
+                    extra_headers=execute_headers, trace_span=execute_span,
+                    truncated_history=truncated_history, grounding_hint=True,
+                )
 
         # Update session
         session.conversation_history.append(Message(role="user", content=user_message))
@@ -240,6 +279,26 @@ class Orchestrator:
             metadata={"tool_calls_count": len(tool_messages), "topic": topic_id},
         )
         execute_span.end()
+
+        # Check for end_session
+        for msg in tool_messages:
+            if msg.name == "end_session":
+                session.session_ended = True
+
+        # Optional grounding validation (logging only in streaming mode - tokens already sent)
+        if self._settings.enable_grounding_validation and not session.session_ended:
+            validate_span = turn_span.start_span(name="validate", span_attributes={"type": "task"})
+            tool_results = [{"tool": m.name, "output": m.content} for m in tool_messages if m.role == "tool"]
+            bt_header = validate_span.export()
+            validate_headers = {"x-bt-parent": bt_header} if bt_header else None
+            validation = await self._validator.validate(
+                response=full_response,
+                tool_results=tool_results,
+                conversation_context=[{"role": m.role, "content": m.content} for m in truncated_history[-6:]],
+                extra_headers=validate_headers,
+            )
+            validate_span.log(output={"is_grounded": validation.is_grounded, "reason": validation.reason})
+            validate_span.end()
 
         # Update session
         session.conversation_history.append(Message(role="user", content=user_message))

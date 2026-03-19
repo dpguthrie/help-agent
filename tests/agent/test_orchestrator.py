@@ -76,3 +76,40 @@ async def test_tool_messages_persisted_in_history(orchestrator):
 
     assert len(session.conversation_history) == 3
     assert session.conversation_history[1].role == "tool"
+
+
+@pytest.mark.asyncio
+async def test_grounding_validation_when_enabled():
+    settings = Settings(braintrust_api_key="test-key", enable_grounding_validation=True)
+    orch = Orchestrator(settings=settings, db_pool=None)
+    orch._classifier.classify = AsyncMock(
+        return_value=ClassifierResult(topic_id="knowledge_faq", confidence=0.9)
+    )
+    orch._executor.execute = AsyncMock(
+        return_value=ExecutorResult(response="Here's the answer.")
+    )
+    from agent.validator import ValidationResult
+    orch._validator.validate = AsyncMock(
+        return_value=ValidationResult(is_grounded=True, reason="grounded", sources=[])
+    )
+    session = SessionState(session_id="test")
+    response = await orch.handle_message("question?", session)
+    assert response == "Here's the answer."
+    orch._validator.validate.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_end_session_sets_flag():
+    settings = Settings(braintrust_api_key="test-key")
+    orch = Orchestrator(settings=settings, db_pool=None)
+    orch._classifier.classify = AsyncMock(
+        return_value=ClassifierResult(topic_id="knowledge_faq", confidence=0.9)
+    )
+    tool_msg = Message(role="tool", content='{"session_ended": true, "message": "Goodbye!"}',
+                       tool_call_id="call_1", name="end_session")
+    orch._executor.execute = AsyncMock(
+        return_value=ExecutorResult(response="Goodbye!", tool_messages=[tool_msg])
+    )
+    session = SessionState(session_id="test")
+    await orch.handle_message("thanks, bye", session)
+    assert session.session_ended is True

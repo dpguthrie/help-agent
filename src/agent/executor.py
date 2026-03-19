@@ -29,7 +29,7 @@ class TopicExecutor:
 
     def _build_messages(
         self, topic: Topic, user_message: str, session: SessionState,
-        truncated_history: list | None = None,
+        truncated_history: list | None = None, grounding_hint: bool = False,
     ) -> list[dict]:
         timestamp = session.session_timestamp.strftime("%Y-%m-%d %H:%M UTC") if session.session_timestamp else "unknown"
 
@@ -53,6 +53,13 @@ class TopicExecutor:
             "If the user writes in any of these languages, respond in that language. "
             "Be concise and helpful."
         )
+
+        if grounding_hint:
+            system += (
+                "\n\nIMPORTANT: Your previous response was not grounded in the available information. "
+                "Only state facts that are directly supported by tool results or conversation context. "
+                "If you don't have the information, say so explicitly."
+            )
 
         messages: list[dict] = [{"role": "system", "content": system}]
 
@@ -78,6 +85,7 @@ class TopicExecutor:
         extra_headers: dict | None = None,
         trace_span: object | None = None,
         truncated_history: list | None = None,
+        grounding_hint: bool = False,
     ) -> ExecutorResult:
         """Non-streaming execution. Returns complete result."""
         full_response = ""
@@ -90,6 +98,7 @@ class TopicExecutor:
             extra_headers=extra_headers,
             trace_span=trace_span,
             truncated_history=truncated_history,
+            grounding_hint=grounding_hint,
         ):
             if chunk.type == "token":
                 full_response += chunk.token
@@ -109,9 +118,10 @@ class TopicExecutor:
         extra_headers: dict | None = None,
         trace_span: object | None = None,
         truncated_history: list | None = None,
+        grounding_hint: bool = False,
     ) -> AsyncGenerator[StreamChunk, None]:
         """Streaming execution. Yields tokens as they arrive, handles tool calls internally."""
-        messages = self._build_messages(topic, user_message, session, truncated_history=truncated_history)
+        messages = self._build_messages(topic, user_message, session, truncated_history=truncated_history, grounding_hint=grounding_hint)
         tools = self._tool_registry.get_openai_tool_schemas(topic.tools) or None
         tool_messages: list[Message] = []
         full_response = ""
