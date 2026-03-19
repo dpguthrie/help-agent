@@ -1,15 +1,37 @@
 from topics.registry import TopicRegistry, get_default_registry
 
 
-def test_default_registry_has_5_topics():
+def test_default_registry_has_11_topics():
     registry = get_default_registry()
-    assert len(registry.all()) == 5
+    assert len(registry.all()) == 11
 
 
 def test_default_registry_topic_ids():
     registry = get_default_registry()
     ids = {t.id for t in registry.all()}
-    assert ids == {"knowledge_faq", "case_creation", "agent_transfer", "case_management", "off_topic"}
+    assert ids == {
+        "knowledge_faq", "case_creation", "agent_transfer", "case_management", "off_topic",
+        "inappropriate_content", "ambiguous_question", "reverse_engineering", "prompt_injection",
+        "appointment_scheduling", "contract_renewals",
+    }
+
+
+def test_safety_topics_have_no_tools():
+    registry = get_default_registry()
+    for topic_id in ["inappropriate_content", "ambiguous_question", "reverse_engineering", "prompt_injection"]:
+        topic = registry.get(topic_id)
+        assert topic.tools == [], f"{topic_id} should have no tools"
+
+
+def test_classification_prompt_safety_first():
+    registry = get_default_registry()
+    prompt = registry.classification_prompt()
+    # Safety topics should appear before functional topics
+    pi_pos = prompt.index("prompt_injection")
+    ic_pos = prompt.index("inappropriate_content")
+    kf_pos = prompt.index("knowledge_faq")
+    assert pi_pos < kf_pos, "prompt_injection should be before knowledge_faq"
+    assert ic_pos < kf_pos, "inappropriate_content should be before knowledge_faq"
 
 
 def test_get_topic_by_id():
