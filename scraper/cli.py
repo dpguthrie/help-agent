@@ -5,8 +5,7 @@ import logging
 import click
 from playwright.async_api import async_playwright
 
-from scraper.crawler import discover_sub_categories, discover_doc_pages, fetch_article_html
-from scraper.parser import parse_article_page
+from scraper.crawler import discover_doc_sections, discover_toc_articles, extract_article
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,35 +21,56 @@ def cli():
 @click.option("--category", required=True, help="Product category to scrape (e.g., 'platform', 'sales')")
 @click.option("--output", default="scraped_articles.jsonl", help="Output JSONL file path")
 @click.option("--limit", default=0, type=int, help="Max articles to scrape (0 = unlimited)")
-def scrape(category: str, output: str, limit: int):
+@click.option("--section-limit", default=0, type=int, help="Max doc sections to crawl (0 = all)")
+def scrape(category: str, output: str, limit: int, section_limit: int):
     """Scrape articles from a Salesforce Help product category."""
-    asyncio.run(_scrape(category, output, limit))
+    asyncio.run(_scrape(category, output, limit, section_limit))
 
 
-async def _scrape(category: str, output: str, limit: int):
+async def _scrape(category: str, output: str, limit: int, section_limit: int):
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
 
-        logger.info(f"Discovering sub-categories for: {category}")
-        sub_cats = await discover_sub_categories(page, category)
-        logger.info(f"Found {len(sub_cats)} sub-categories")
+        # Step 1: Discover top-level doc sections for the category
+        sections = await discover_doc_sections(page, category)
+        logger.info(f"Found {len(sections)} doc sections for '{category}'")
+        for s in sections[:10]:
+            logger.info(f"  - {s['text']}")
 
+        if section_limit:
+            sections = sections[:section_limit]
+
+        # Step 2: For each section, discover all articles in its TOC tree
+        all_article_urls = {}  # url -> section_name for dedup
+        for section in sections:
+            toc_articles = await discover_toc_articles(page, section["href"])
+            logger.info(f"  {section['text']}: {len(toc_articles)} articles in TOC")
+            for art in toc_articles:
+                if art["href"] not in all_article_urls:
+                    all_article_urls[art["href"]] = section["text"]
+
+        logger.info(f"Total unique article URLs discovered: {len(all_article_urls)}")
+
+        if limit:
+            urls_to_scrape = list(all_article_urls.items())[:limit]
+        else:
+            urls_to_scrape = list(all_article_urls.items())
+
+        # Step 3: Extract content from each article
         articles = []
-        for sc in sub_cats:
-            logger.info(f"Discovering docs for: {sc['name']}")
-            doc_urls = await discover_doc_pages(page, sc["href"])
-            logger.info(f"  Found {len(doc_urls)} articles")
-
-            for url in doc_urls:
-                if limit and len(articles) >= limit:
-                    break
-                logger.info(f"  Fetching: {url}")
-                html = await fetch_article_html(page, url)
-                article = parse_article_page(html, url)
+        for i, (url, section_name) in enumerate(urls_to_scrape):
+            logger.info(f"  [{i+1}/{len(urls_to_scrape)}] Fetching: {url[:80]}...")
+            try:
+                article = await extract_article(page, url)
                 article["product_category"] = category
-                article["product_sub_category"] = sc["name"]
-                articles.append(article)
+                article["product_sub_category"] = section_name
+                if article["content"]:  # Skip empty articles
+                    articles.append(article)
+                else:
+                    logger.warning(f"  Skipped (empty content): {url}")
+            except Exception as e:
+                logger.error(f"  Error fetching {url}: {e}")
 
         await browser.close()
 
