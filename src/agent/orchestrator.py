@@ -111,7 +111,10 @@ class Orchestrator:
         classify_result = await self._classifier.classify(
             user_message, truncated_history, extra_headers=classify_headers,
         )
-        classify_span.log(output={"topic_id": classify_result.topic_id, "confidence": classify_result.confidence})
+        classify_span.log(
+            input=user_message,
+            output={"topic_id": classify_result.topic_id, "confidence": classify_result.confidence},
+        )
         classify_span.end()
 
         topic_id = classify_result.topic_id
@@ -134,7 +137,11 @@ class Orchestrator:
             extra_headers=execute_headers,
             trace_span=execute_span,
         )
-        execute_span.log(output={"response": exec_result.response[:200], "tool_calls_count": len(exec_result.tool_messages)})
+        execute_span.log(
+            input=user_message,
+            output=exec_result.response,
+            metadata={"tool_calls_count": len(exec_result.tool_messages), "topic": topic_id},
+        )
         execute_span.end()
 
         # Update session
@@ -183,7 +190,10 @@ class Orchestrator:
         classify_result = await self._classifier.classify(
             user_message, truncated_history, extra_headers=classify_headers,
         )
-        classify_span.log(output={"topic_id": classify_result.topic_id, "confidence": classify_result.confidence})
+        classify_span.log(
+            input=user_message,
+            output={"topic_id": classify_result.topic_id, "confidence": classify_result.confidence},
+        )
         classify_span.end()
 
         topic_id = classify_result.topic_id
@@ -222,7 +232,11 @@ class Orchestrator:
                 full_response = chunk.response
                 tool_messages = chunk.tool_messages
 
-        execute_span.log(output={"response": full_response[:200], "tool_calls_count": len(tool_messages)})
+        execute_span.log(
+            input=user_message,
+            output=full_response,
+            metadata={"tool_calls_count": len(tool_messages), "topic": topic_id},
+        )
         execute_span.end()
 
         # Update session
