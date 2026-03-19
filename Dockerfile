@@ -1,8 +1,10 @@
 FROM python:3.12-slim
 
+RUN pip install uv
+
 WORKDIR /app
 COPY pyproject.toml .
-RUN pip install --no-cache-dir .
+RUN uv pip install --system --no-cache .
 
 COPY src/ src/
 COPY .chainlit/ .chainlit/ 2>/dev/null || true
