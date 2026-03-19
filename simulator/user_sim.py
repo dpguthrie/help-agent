@@ -41,9 +41,11 @@ async def generate_scenario(
                     f"- Language: {persona.language}\n"
                     f"- Goal: {persona.goal_type}\n"
                     f"- Topic areas: {', '.join(persona.topic_areas)}\n\n"
+                    f"IMPORTANT: The opening_message must be SHORT (1-2 sentences, under 150 characters). "
+                    f"Real customers write brief messages like 'How do I reset my password?' not paragraphs.\n\n"
                     f"Respond with JSON:\n"
                     f'{{"scenario_description": "2-3 sentence description of their issue",'
-                    f' "opening_message": "their first message to the agent (in {persona.language})",'
+                    f' "opening_message": "their first message to the agent - 1-2 sentences max (in {persona.language})",'
                     f' "expected_resolution": "knowledge_answer|case_created|transferred|gave_up"}}'
                 ),
             },
@@ -71,9 +73,15 @@ async def generate_user_message(
 ) -> str:
     edge_instructions = EDGE_CASE_INSTRUCTIONS.get(persona.id, "")
 
-    # Build recent history string
-    recent = history[-8:]  # last 4 turns
-    history_str = "\n".join(f"{m['role']}: {m['content']}" for m in recent)
+    # Build recent history string - truncate long messages
+    recent = history[-6:]  # last 3 turns
+    history_lines = []
+    for m in recent:
+        content = m['content']
+        if len(content) > 300:
+            content = content[:300] + "..."
+        history_lines.append(f"{m['role']}: {content}")
+    history_str = "\n".join(history_lines)
 
     response = await client.chat.completions.create(
         model=model,
@@ -83,7 +91,9 @@ async def generate_user_message(
                 "role": "system",
                 "content": (
                     "You are simulating a customer in a support conversation. "
-                    "Generate ONLY the next user message. No explanation or metadata."
+                    "Generate ONLY the next user message. No explanation or metadata. "
+                    "IMPORTANT: Keep your message SHORT - 1 to 3 sentences maximum. "
+                    "Real customers write brief messages, not essays."
                 ),
             },
             {

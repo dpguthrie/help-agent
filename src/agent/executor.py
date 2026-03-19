@@ -28,7 +28,8 @@ class TopicExecutor:
         )
 
     def _build_messages(
-        self, topic: Topic, user_message: str, session: SessionState
+        self, topic: Topic, user_message: str, session: SessionState,
+        truncated_history: list | None = None,
     ) -> list[dict]:
         timestamp = session.session_timestamp.strftime("%Y-%m-%d %H:%M UTC") if session.session_timestamp else "unknown"
 
@@ -55,7 +56,8 @@ class TopicExecutor:
 
         messages: list[dict] = [{"role": "system", "content": system}]
 
-        for msg in session.conversation_history:
+        history = truncated_history if truncated_history is not None else session.conversation_history
+        for msg in history:
             m = {"role": msg.role, "content": msg.content}
             if msg.tool_calls:
                 m["tool_calls"] = msg.tool_calls
@@ -75,6 +77,7 @@ class TopicExecutor:
         session: SessionState,
         extra_headers: dict | None = None,
         trace_span: object | None = None,
+        truncated_history: list | None = None,
     ) -> ExecutorResult:
         """Non-streaming execution. Returns complete result."""
         full_response = ""
@@ -86,6 +89,7 @@ class TopicExecutor:
             session=session,
             extra_headers=extra_headers,
             trace_span=trace_span,
+            truncated_history=truncated_history,
         ):
             if chunk.type == "token":
                 full_response += chunk.token
@@ -104,9 +108,10 @@ class TopicExecutor:
         session: SessionState,
         extra_headers: dict | None = None,
         trace_span: object | None = None,
+        truncated_history: list | None = None,
     ) -> AsyncGenerator[StreamChunk, None]:
         """Streaming execution. Yields tokens as they arrive, handles tool calls internally."""
-        messages = self._build_messages(topic, user_message, session)
+        messages = self._build_messages(topic, user_message, session, truncated_history=truncated_history)
         tools = self._tool_registry.get_openai_tool_schemas(topic.tools) or None
         tool_messages: list[Message] = []
         full_response = ""

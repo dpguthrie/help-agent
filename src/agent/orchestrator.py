@@ -136,6 +136,7 @@ class Orchestrator:
             session=session,
             extra_headers=execute_headers,
             trace_span=execute_span,
+            truncated_history=truncated_history,
         )
         execute_span.log(
             input=user_message,
@@ -225,6 +226,7 @@ class Orchestrator:
             session=session,
             extra_headers=execute_headers,
             trace_span=execute_span,
+            truncated_history=truncated_history,
         ):
             if chunk.type in ("token", "tool_start", "tool_end"):
                 yield chunk
