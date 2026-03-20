@@ -60,3 +60,50 @@ CREATE TABLE sessions (
 );
 
 CREATE INDEX ON article_chunks USING hnsw (embedding vector_cosine_ops);
+
+-- Chainlit data layer tables (required for thread persistence and feedback)
+CREATE TABLE IF NOT EXISTS "Thread" (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    metadata JSONB,
+    "createdAt" TIMESTAMP DEFAULT now(),
+    "updatedAt" TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "Element" (
+    id TEXT PRIMARY KEY,
+    "threadId" TEXT REFERENCES "Thread"(id) ON DELETE CASCADE,
+    "stepId" TEXT,
+    type TEXT,
+    name TEXT,
+    url TEXT,
+    display TEXT,
+    size TEXT,
+    language TEXT,
+    mime TEXT,
+    "forId" TEXT,
+    "createdAt" TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "Step" (
+    id TEXT PRIMARY KEY,
+    "threadId" TEXT REFERENCES "Thread"(id) ON DELETE CASCADE,
+    "parentId" TEXT,
+    name TEXT,
+    type TEXT,
+    input TEXT,
+    output TEXT,
+    metadata JSONB,
+    "createdAt" TIMESTAMP DEFAULT now(),
+    "startTime" TIMESTAMP,
+    "endTime" TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS "Feedback" (
+    id TEXT PRIMARY KEY,
+    "threadId" TEXT REFERENCES "Thread"(id) ON DELETE CASCADE,
+    "stepId" TEXT,
+    value INTEGER,
+    comment TEXT,
+    "createdAt" TIMESTAMP DEFAULT now()
+);

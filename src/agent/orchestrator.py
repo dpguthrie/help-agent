@@ -52,6 +52,7 @@ class Orchestrator:
         self._executor = TopicExecutor(settings=settings, tool_registry=self._tool_registry)
         self._validator = GroundingValidator(settings=settings)
         self._session_spans: dict[str, object] = {}
+        self._last_turn_spans: dict[str, object] = {}  # session_id -> last turn span
 
         # Try to init tracing, fall back to noop
         try:
@@ -98,9 +99,14 @@ class Orchestrator:
             )
         return self._session_spans[session.session_id]
 
+    def get_last_turn_span(self, session_id: str):
+        """Get the most recent turn span for a session (for feedback logging)."""
+        return self._last_turn_spans.get(session_id)
+
     async def handle_message(self, user_message: str, session: SessionState) -> str:
         session_span = self._get_session_span(session)
         turn_span = session_span.start_span(name=f"turn.{session.turn_count}", span_attributes={"type": "task"})
+        self._last_turn_spans[session.session_id] = turn_span
 
         # Bootstrap: set timestamp on first turn
         if session.turn_count == 0:
@@ -208,6 +214,7 @@ class Orchestrator:
         """Streaming version of handle_message. Yields StreamChunks with tokens."""
         session_span = self._get_session_span(session)
         turn_span = session_span.start_span(name=f"turn.{session.turn_count}", span_attributes={"type": "task"})
+        self._last_turn_spans[session.session_id] = turn_span
 
         # Bootstrap: set timestamp on first turn
         if session.turn_count == 0:

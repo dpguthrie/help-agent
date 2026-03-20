@@ -72,6 +72,7 @@ async def on_message(message: cl.Message):
 
     msg = None  # The actual response message, created when tokens start flowing
     streaming_started = False
+    turn_span = None
 
     async for chunk in orchestrator.handle_message_stream(message.content, session):
         if chunk.type == "classify_end":
@@ -99,10 +100,33 @@ async def on_message(message: cl.Message):
 
     if msg:
         await msg.update()
+        # Store the turn span reference for feedback logging
+        turn_span = orchestrator.get_last_turn_span(session.session_id)
+        if turn_span and msg.id:
+            span_map = cl.user_session.get("span_map") or {}
+            span_map[msg.id] = turn_span
+            cl.user_session.set("span_map", span_map)
     elif not streaming_started:
         # Edge case: no tokens were produced
         status_msg.content = "I'm sorry, I wasn't able to generate a response. Please try again."
         await status_msg.update()
+
+
+@cl.on_feedback
+async def on_feedback(feedback: cl.types.Feedback):
+    """Log thumbs up/down feedback to the Braintrust turn span."""
+    span_map = cl.user_session.get("span_map") or {}
+    turn_span = span_map.get(feedback.forId)
+
+    score = 1.0 if feedback.value == 1 else 0.0
+
+    if turn_span:
+        turn_span.log(
+            scores={"user_feedback": score},
+            metadata={"feedback_comment": feedback.comment or ""},
+        )
+
+    return True
 
 
 @cl.on_chat_end
