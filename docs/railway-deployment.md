@@ -5,7 +5,7 @@ Deploy the Salesforce Help Agent to Railway with a public URL.
 ## Prerequisites
 
 - [Railway account](https://railway.com) on the Hobby plan ($5/month)
-- Railway CLI installed: `npm install -g @railway/cli` or `brew install railway`
+- GitHub repo with the agent code pushed
 - `BRAINTRUST_API_KEY` ready
 - Local DB loaded with articles (run `./scripts/load_all_scraped.sh` first)
 
@@ -21,82 +21,69 @@ Deploy the Salesforce Help Agent to Railway with a public URL.
 
 ## Step 1: Create Railway Project
 
-```bash
-# Login to Railway
-railway login
-
-# Create a new project
-railway init --name sfdc-help-agent
-```
+1. Go to [railway.com/dashboard](https://railway.com/dashboard)
+2. Click **"New Project"**
+3. Select **"Empty Project"**
+4. Name it `sfdc-help-agent`
 
 ## Step 2: Deploy PostgreSQL with pgvector
 
-Railway has a pgvector template in their marketplace.
-
-```bash
-# Add a Postgres service with pgvector
-# Option A: Via the Railway dashboard
-#   1. Go to your project in https://railway.com/dashboard
-#   2. Click "New" -> "Database" -> "PostgreSQL"
-#   3. Or search for "pgvector" in templates and deploy that
-
-# Option B: Via CLI (standard Postgres, then enable pgvector)
-railway add --plugin postgresql
-```
-
-After Postgres is provisioned, note the connection string. It will be available as `DATABASE_URL` in the service environment.
+1. Inside your project, click **"New"** → **"Database"** → **"PostgreSQL"**
+   - Alternatively, search for **"pgvector"** in the template marketplace for a pre-configured pgvector instance
+2. Wait for the database to provision (takes ~30 seconds)
+3. Click on the Postgres service → **"Variables"** tab
+4. Copy the `DATABASE_URL` connection string — you'll need this for migrations and seeding
 
 ### Run migrations
 
-Connect to the Railway Postgres and run the initial migration:
+Connect to the Railway Postgres from your local machine and run the initial migration:
 
 ```bash
-# Get the connection string from Railway
-railway variables --service postgresql
-
-# Run migration against Railway DB
-psql "$RAILWAY_DATABASE_URL" < db/migrations/001_initial.sql
+# Use the DATABASE_URL you copied from Railway
+psql "postgresql://postgres:xxxx@xxxx.railway.app:xxxx/railway" < db/migrations/001_initial.sql
 ```
 
 ## Step 3: Deploy the App Service
 
-```bash
-# Link to the project
-railway link
+1. In your project, click **"New"** → **"GitHub Repo"**
+2. Select your repository
+3. Railway will auto-detect the `Dockerfile` and start building
 
-# Set environment variables
-railway variables set BRAINTRUST_API_KEY="sk-your-key-here"
-railway variables set CLASSIFIER_MODEL="claude-haiku-4-5"
-railway variables set EXECUTOR_MODEL="claude-sonnet-4-5"
-railway variables set EMBEDDING_MODEL="text-embedding-3-small"
-railway variables set CLASSIFIER_TEMPERATURE="0.0"
-railway variables set EXECUTOR_TEMPERATURE="0.2"
-railway variables set EXECUTOR_MAX_TOKENS="4096"
-railway variables set PORT="8000"
+### Set environment variables
 
-# DATABASE_URL is automatically set by Railway when you link Postgres to the app service
-# Verify it's set:
-railway variables | grep DATABASE_URL
+1. Click on the app service → **"Variables"** tab
+2. Click **"New Variable"** and add each of these:
 
-# Deploy
-railway up
-```
+| Variable | Value |
+|---|---|
+| `BRAINTRUST_API_KEY` | `sk-your-key-here` |
+| `CLASSIFIER_MODEL` | `claude-haiku-4-5` |
+| `EXECUTOR_MODEL` | `claude-sonnet-4-5` |
+| `EMBEDDING_MODEL` | `text-embedding-3-small` |
+| `CLASSIFIER_TEMPERATURE` | `0.0` |
+| `EXECUTOR_TEMPERATURE` | `0.2` |
+| `EXECUTOR_MAX_TOKENS` | `4096` |
+| `PORT` | `8000` |
 
-Railway will:
-1. Detect the `Dockerfile`
-2. Build the image
-3. Deploy and expose port 8000
-4. Provide a public URL (e.g., `sfdc-help-agent-production.up.railway.app`)
+3. **Link the database**: Click **"New Variable"** → **"Add Reference"** → select the Postgres service → select `DATABASE_URL`. This auto-populates the connection string and keeps it in sync.
+
+### Configure networking
+
+1. Click on the app service → **"Settings"** tab
+2. Under **"Networking"**, click **"Generate Domain"** to get a public URL (e.g., `sfdc-help-agent-production.up.railway.app`)
+3. Set the port to **8000**
+
+Railway will automatically rebuild and deploy when you push to your GitHub repo.
 
 ## Step 4: Seed the Database
 
 ### Option A: Load articles directly into Railway DB
 
-Point the scraper's load command at the Railway database:
+Point the scraper's load command at the Railway database URL you copied in Step 2:
 
 ```bash
-# Get Railway DB URL
-export RAILWAY_DB_URL=$(railway variables get DATABASE_URL --service postgresql)
+# Replace with your Railway DATABASE_URL
+export RAILWAY_DB_URL="postgresql://postgres:xxxx@xxxx.railway.app:xxxx/railway"
 
 # Load articles
 PYTHONPATH=src:. .venv/bin/python -m scraper.cli load \
@@ -134,65 +121,51 @@ asyncio.run(main())
 
 ## Step 5: Verify Deployment
 
-```bash
-# Get the public URL
-railway domain
+1. Open the public URL from Step 3 in your browser
+2. You should see the Chainlit welcome message
+3. Try: "How do I create a report?" — should search the KB and return results
 
-# Test it
-curl https://your-app.up.railway.app/
-
-# Open in browser
-open https://your-app.up.railway.app/
-```
+---
 
 ## Step 6: Custom Domain (Optional)
 
-```bash
-# Add a custom domain
-railway domain add help-agent.yourdomain.com
-
-# Then add a CNAME record in your DNS:
-# help-agent.yourdomain.com -> your-app.up.railway.app
-```
+1. Click on the app service → **"Settings"** → **"Networking"**
+2. Click **"Custom Domain"**
+3. Enter your domain (e.g., `help-agent.yourdomain.com`)
+4. Add a **CNAME record** in your DNS provider pointing to the Railway domain
 
 ---
 
 ## Step 7: Deploy Simulator Service (Optional)
 
-The simulator runs as a separate Railway service that generates realistic traffic at a configurable cadence. This produces a steady stream of traced conversations in Braintrust for error analysis.
+The simulator runs as a separate Railway service that generates realistic traffic at a configurable cadence.
 
-### Create a new service in Railway
+### Create the simulator service
 
-In the Railway dashboard:
-1. Click "New" -> "Service" -> "From Repo" (same repo)
-2. Set the **Dockerfile path** to `Dockerfile.simulator`
-3. Set the **Start command** to `python -m simulator.service` (or leave default from Dockerfile)
+1. In your project, click **"New"** → **"GitHub Repo"** (same repo)
+2. Click on the new service → **"Settings"** tab
+3. Under **"Build"**, set the **Dockerfile path** to `Dockerfile.simulator`
+4. Under **"Deploy"**, set the **Start command** to `python -m simulator.service`
 
 ### Set environment variables
 
-Same DB and API credentials as the agent, plus simulator-specific config:
+1. Click on the simulator service → **"Variables"** tab
+2. Add a **reference** to the Postgres `DATABASE_URL` (same as the agent service)
+3. Add these variables:
 
-```bash
-# Same as agent service
-railway variables set DATABASE_URL="$RAILWAY_DATABASE_URL" --service simulator
-railway variables set BRAINTRUST_API_KEY="sk-your-key" --service simulator
-railway variables set CLASSIFIER_MODEL="claude-haiku-4-5" --service simulator
-railway variables set EXECUTOR_MODEL="claude-sonnet-4-5" --service simulator
-railway variables set EMBEDDING_MODEL="text-embedding-3-small" --service simulator
-
-# Simulator-specific
-railway variables set SIMULATOR_CADENCE="300" --service simulator      # 5 min between batches
-railway variables set SIMULATOR_BATCH_SIZE="5" --service simulator      # 5 conversations per batch
-railway variables set SIMULATOR_CONCURRENCY="3" --service simulator     # 3 concurrent
-railway variables set SIMULATOR_MODEL="gpt-5-nano" --service simulator  # cheap sim model
-railway variables set SIMULATOR_ENABLED="true" --service simulator      # set to "false" to pause
-```
+| Variable | Value |
+|---|---|
+| `BRAINTRUST_API_KEY` | `sk-your-key-here` |
+| `CLASSIFIER_MODEL` | `claude-haiku-4-5` |
+| `EXECUTOR_MODEL` | `claude-sonnet-4-5` |
+| `EMBEDDING_MODEL` | `text-embedding-3-small` |
+| `SIMULATOR_CADENCE` | `3600` (1 batch per hour) |
+| `SIMULATOR_BATCH_SIZE` | `3` |
+| `SIMULATOR_CONCURRENCY` | `3` |
+| `SIMULATOR_MODEL` | `gpt-5-nano` |
+| `SIMULATOR_ENABLED` | `true` |
 
 ### Cost for simulator
-
-With default settings (5 conversations every 5 minutes):
-- ~1,440 conversations/day × $0.03/conversation = **~$43/day**
-- That's high for continuous use. Recommended production settings:
 
 | Setting | Low traffic | Medium | High |
 |---|---|---|---|
@@ -202,44 +175,40 @@ With default settings (5 conversations every 5 minutes):
 | LLM cost/day | ~$1.50 | ~$13 | ~$43 |
 | Compute cost/day | ~$0.50 | ~$1 | ~$2 |
 
-For error analysis, **low traffic (1 batch per hour)** is usually sufficient. You can temporarily increase the cadence when you want more data.
+Start with **low traffic** and increase when you want more data for error analysis.
 
 ### Pause/Resume
 
-```bash
-# Pause without deleting
-railway variables set SIMULATOR_ENABLED="false" --service simulator
-
-# Resume
-railway variables set SIMULATOR_ENABLED="true" --service simulator
-```
+To pause the simulator without deleting it:
+1. Click on the simulator service → **"Variables"** tab
+2. Change `SIMULATOR_ENABLED` to `false`
+3. To resume, change it back to `true`
 
 ---
 
 ## Updating the Deployment
 
-```bash
-# After making changes locally:
-git add -A && git commit -m "update"
-railway up
+**Auto-deploy (recommended):**
+1. Click on the app service → **"Settings"** → **"Source"**
+2. Connect your GitHub repo if not already connected
+3. Every push to `main` will auto-deploy
 
-# Or connect GitHub for auto-deploy:
-# In Railway dashboard -> Settings -> Connect GitHub repo
-# Every push to main will auto-deploy
-```
+**Manual deploy:**
+1. Push your changes to GitHub
+2. In Railway dashboard, click on the service → **"Deployments"** → **"Deploy"**
 
 ## Monitoring
 
-- **Railway dashboard**: CPU, memory, network usage per service
-- **Braintrust dashboard**: Trace logs, token usage, latency
-- **Logs**: `railway logs` or view in dashboard
+- **Railway dashboard**: Click on any service to see CPU, memory, network usage, and logs
+- **Braintrust dashboard**: Trace logs, token usage, latency at [braintrust.dev](https://www.braintrust.dev)
 
 ## Troubleshooting
 
 | Issue | Fix |
 |---|---|
-| `pgvector extension not found` | Run `CREATE EXTENSION IF NOT EXISTS vector;` on Railway Postgres |
-| `DATABASE_URL not set` | Link the Postgres service to the app service in Railway dashboard |
-| Port issues | Ensure `PORT=8000` env var is set; Chainlit reads from this |
-| Connection refused | Check Railway's internal networking; services communicate via internal hostnames |
-| Slow cold starts | Railway sleeps idle services; first request after idle takes longer |
+| `pgvector extension not found` | Connect to Railway Postgres and run `CREATE EXTENSION IF NOT EXISTS vector;` |
+| `DATABASE_URL not set` | Add a variable reference from the Postgres service to the app service |
+| Port issues | Ensure `PORT=8000` is set in the app service variables |
+| Connection refused | Ensure the Postgres service is linked via variable reference, not a hardcoded URL |
+| Slow cold starts | Railway sleeps idle services on the Hobby plan; first request after idle takes a few seconds |
+| Build fails | Check the build logs in the **"Deployments"** tab for the service |

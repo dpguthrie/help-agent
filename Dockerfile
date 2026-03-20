@@ -6,5 +6,7 @@ WORKDIR /app
 COPY . .
 RUN uv pip install --system --no-cache .
 
+ENV PYTHONPATH=/app/src
+
 EXPOSE 8000
-CMD ["chainlit", "run", "src/app.py", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "scripts/startup.py"]
