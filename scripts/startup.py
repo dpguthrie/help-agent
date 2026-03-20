@@ -76,10 +76,6 @@ if __name__ == "__main__":
     # Run migrations and seed
     asyncio.run(main())
 
-    # Run Chainlit DB migrations (creates Thread, Element tables etc.)
-    print("Running Chainlit DB migrations...")
-    subprocess.run(["chainlit", "db", "upgrade"], check=False)
-
     # Start Chainlit
     port = os.environ.get("PORT", "8000")
     print(f"Starting Chainlit on port {port}...")
