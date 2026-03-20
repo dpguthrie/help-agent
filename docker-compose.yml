@@ -60,3 +60,5 @@ services:
 
 volumes:
   pgdata:
+    external: false
+    name: sfdc-help-agent-pgdata
