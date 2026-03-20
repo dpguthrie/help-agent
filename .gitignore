@@ -218,4 +218,5 @@ __marimo__/
 # Custom
 resources/
 scraped_*.jsonl
-all_articles.jsonldb/backup.sql
+all_articles.jsonl
+db/backup.sql
