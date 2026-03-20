@@ -121,7 +121,9 @@ class Orchestrator:
         bt_header = classify_span.export()
         classify_headers = {"x-bt-parent": bt_header} if bt_header else None
         classify_result = await self._classifier.classify(
-            user_message, truncated_history, extra_headers=classify_headers,
+            user_message, truncated_history,
+            extra_headers=classify_headers,
+            current_topic=session.current_topic,
         )
         classify_span.log(
             input=user_message,
@@ -228,7 +230,9 @@ class Orchestrator:
         bt_header = classify_span.export()
         classify_headers = {"x-bt-parent": bt_header} if bt_header else None
         classify_result = await self._classifier.classify(
-            user_message, truncated_history, extra_headers=classify_headers,
+            user_message, truncated_history,
+            extra_headers=classify_headers,
+            current_topic=session.current_topic,
         )
         classify_span.log(
             input=user_message,

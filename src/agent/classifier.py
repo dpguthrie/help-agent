@@ -29,16 +29,27 @@ class TopicClassifier:
         user_message: str,
         history: list[Message],
         extra_headers: dict | None = None,
+        current_topic: str | None = None,
     ) -> ClassifierResult:
         system_prompt = self._topic_registry.classification_prompt()
 
         history_text = ""
         if history:
             recent = history[-6:]
-            lines = [f"{m.role}: {m.content}" for m in recent if m.role in ("user", "assistant")]
+            lines = [f"{m.role}: {m.content[:200]}" for m in recent if m.role in ("user", "assistant")]
             history_text = "\n\nRecent conversation:\n" + "\n".join(lines) + "\n"
 
-        user_content = f"{history_text}\nCurrent user message: {user_message}"
+        # Add current topic context to help maintain flow continuity
+        topic_context = ""
+        if current_topic:
+            topic_context = (
+                f"\nThe conversation is currently in the '{current_topic}' topic. "
+                f"If the user's message is a continuation of this flow (answering questions, "
+                f"providing requested information, confirming details), prefer staying in "
+                f"'{current_topic}' unless the user clearly changes intent."
+            )
+
+        user_content = f"{history_text}{topic_context}\nCurrent user message: {user_message}"
 
         response = await self._client.chat.completions.create(
             model=self._settings.classifier_model,

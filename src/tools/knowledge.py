@@ -50,7 +50,7 @@ class SearchKnowledgeTool(Tool):
                     FROM article_chunks ac
                     JOIN articles a ON a.id = ac.article_id
                     ORDER BY (ac.embedding <=> $1) - (CASE WHEN a.product_category = $2 THEN 0.05 ELSE 0.0 END)
-                    LIMIT 5
+                    LIMIT 3
                     """,
                     embedding, product_category,
                 )
@@ -63,7 +63,7 @@ class SearchKnowledgeTool(Tool):
                     FROM article_chunks ac
                     JOIN articles a ON a.id = ac.article_id
                     ORDER BY ac.embedding <=> $1
-                    LIMIT 5
+                    LIMIT 3
                     """,
                     embedding,
                 )
