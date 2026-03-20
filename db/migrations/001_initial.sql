@@ -62,27 +62,16 @@ CREATE TABLE sessions (
 CREATE INDEX ON article_chunks USING hnsw (embedding vector_cosine_ops);
 
 -- Chainlit data layer tables (required for thread persistence and feedback)
+-- Schema matches chainlit v2.10.0 chainlit_data_layer.py expectations
 CREATE TABLE IF NOT EXISTS "Thread" (
     id TEXT PRIMARY KEY,
     name TEXT,
     metadata JSONB,
+    tags TEXT[],
+    "userId" TEXT,
+    "userIdentifier" TEXT,
     "createdAt" TIMESTAMP DEFAULT now(),
     "updatedAt" TIMESTAMP DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS "Element" (
-    id TEXT PRIMARY KEY,
-    "threadId" TEXT REFERENCES "Thread"(id) ON DELETE CASCADE,
-    "stepId" TEXT,
-    type TEXT,
-    name TEXT,
-    url TEXT,
-    display TEXT,
-    size TEXT,
-    language TEXT,
-    mime TEXT,
-    "forId" TEXT,
-    "createdAt" TIMESTAMP DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS "Step" (
@@ -93,17 +82,37 @@ CREATE TABLE IF NOT EXISTS "Step" (
     type TEXT,
     input TEXT,
     output TEXT,
-    metadata JSONB,
+    metadata JSONB DEFAULT '{}',
+    "showInput" TEXT DEFAULT 'json',
+    "isError" BOOLEAN DEFAULT false,
     "createdAt" TIMESTAMP DEFAULT now(),
     "startTime" TIMESTAMP,
     "endTime" TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS "Feedback" (
+CREATE TABLE IF NOT EXISTS "Element" (
     id TEXT PRIMARY KEY,
     "threadId" TEXT REFERENCES "Thread"(id) ON DELETE CASCADE,
     "stepId" TEXT,
-    value INTEGER,
+    metadata JSONB,
+    mime TEXT,
+    name TEXT,
+    "objectKey" TEXT,
+    url TEXT,
+    "chainlitKey" TEXT,
+    display TEXT,
+    size TEXT,
+    language TEXT,
+    page INTEGER,
+    props JSONB,
+    "createdAt" TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "Feedback" (
+    id TEXT PRIMARY KEY,
+    "stepId" TEXT,
+    name TEXT,
+    value FLOAT,
     comment TEXT,
     "createdAt" TIMESTAMP DEFAULT now()
 );
